@@ -1,15 +1,17 @@
-// backend/createCollection.js
+import dotenv from 'dotenv';
 import Typesense from 'typesense';
+
+dotenv.config();
 
 const client = new Typesense.Client({
   nodes: [
     {
-      host: 'localhost', // Replace with IP if running remotely
-      port: 8108,
-      protocol: 'http',
+      host: process.env.TYPESENSE_HOST,
+      port: parseInt(process.env.TYPESENSE_PORT, 10),
+      protocol: process.env.TYPESENSE_PROTOCOL,
     },
   ],
-  apiKey: 'baRRa17!',
+  apiKey: process.env.TYPESENSE_API_KEY,
   connectionTimeoutSeconds: 2,
 });
 
@@ -67,7 +69,6 @@ async function createCollection() {
     default_sorting_field: 'number',
     token_separators: ['-', '.', ':', '(', ')', ' '],
   };
-  
 
   try {
     await client.collections('rules').delete();
@@ -85,7 +86,6 @@ async function createCollection() {
 }
 
 createCollection();
-
 
 
 

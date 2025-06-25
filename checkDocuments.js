@@ -1,14 +1,17 @@
+import dotenv from 'dotenv';
 import Typesense from 'typesense';
+
+dotenv.config();
 
 const client = new Typesense.Client({
   nodes: [
     {
-      host: '192.168.4.166', // your Typesense server IP
-      port: 8108,
-      protocol: 'http',
+      host: process.env.TYPESENSE_HOST,
+      port: parseInt(process.env.TYPESENSE_PORT, 10),
+      protocol: process.env.TYPESENSE_PROTOCOL,
     },
   ],
-  apiKey: 'baRRa17!',
+  apiKey: process.env.TYPESENSE_API_KEY,
   connectionTimeoutSeconds: 2,
 });
 
@@ -19,17 +22,17 @@ async function listDocuments() {
       query_by: 'combined,title,content',
       per_page: 50,
     });
-    console.log('Documents found:', documents.hits.length);
+    console.log(`✅ ${documents.hits.length} documents found.`);
     documents.hits.forEach((hit, index) => {
-      console.log(`\nDocument #${index + 1}:`);
+      console.log(`\n📄 Document #${index + 1}:`);
       console.log('Number:', hit.document.number);
       console.log('Title:', hit.document.title);
       console.log('Sport:', hit.document.sport);
-      console.log('Content snippet:', hit.document.content.substring(0, 100) + '...');
+      console.log('Content snippet:', (hit.document.content || '').substring(0, 100) + '...');
       console.log('Path:', hit.document.path);
     });
   } catch (error) {
-    console.error('Error fetching documents:', error);
+    console.error('❌ Error fetching documents:', error);
   }
 }
 

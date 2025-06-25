@@ -1,6 +1,9 @@
 import cors from 'cors';
+import dotenv from 'dotenv';
 import express from 'express';
 import Typesense from 'typesense';
+
+dotenv.config();
 
 const app = express();
 app.use(cors());
@@ -8,12 +11,12 @@ app.use(cors());
 const client = new Typesense.Client({
   nodes: [
     {
-      host: 'localhost',
-      port: 8108,
-      protocol: 'http',
+      host: process.env.TYPESENSE_HOST,
+      port: parseInt(process.env.TYPESENSE_PORT, 10),
+      protocol: process.env.TYPESENSE_PROTOCOL,
     },
   ],
-  apiKey: 'baRRa17!',
+  apiKey: process.env.TYPESENSE_API_KEY,
   connectionTimeoutSeconds: 2,
 });
 
@@ -53,9 +56,9 @@ app.get('/search', async (req, res) => {
   }
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running at http://192.168.4.166:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 

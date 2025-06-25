@@ -1,15 +1,15 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "description": "Backend server for Sports Rules and Trivia App",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["typesense", "sports", "rules", "backend"],
+  "author": "Your Name",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
