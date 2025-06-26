@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import Typesense from 'typesense';
-import aiHelper from './backend/aiHelper.js';
+import aiHelper from './aiHelper.js';
 
 dotenv.config();
 
