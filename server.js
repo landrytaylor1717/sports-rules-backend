@@ -1,10 +1,9 @@
-import pkg from '@pinecone-database/pinecone';
+import pinecone from '@pinecone-database/pinecone';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import Typesense from 'typesense';
 import aiHelper from './aiHelper.js';
-const { Pinecone } = pkg;
 
 dotenv.config();
 
@@ -24,12 +23,13 @@ const client = new Typesense.Client({
   connectionTimeoutSeconds: 2,
 });
 
-const pinecone = new Pinecone({
+const pineconeClient = new pinecone.Client({
   apiKey: process.env.PINECONE_API_KEY,
   environment: process.env.PINECONE_ENVIRONMENT,
 });
 
-const pineconeIndex = pinecone.Index('sports-rules');
+const pineconeIndex = pineconeClient.Index('sports-rules');
+
 
 app.get('/search', async (req, res) => {
   const query = req.query.q?.trim() || '';
