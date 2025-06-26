@@ -29,13 +29,34 @@ const ruleSources = [
   { file: '../data/rules/golf.js', sport: 'Golf', path: '/rules/golfrules/' },
 ];
 
-const BATCH_SIZE = 200;  // Adjust based on container size — smaller for low-resource environments
+const BATCH_SIZE = 100; // Small batch to reduce memory spikes
+const DELAY_BETWEEN_BATCHES_MS = 1500;
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 2000;
+
+const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
+async function safeImport(ndjson, attempt = 1) {
+  try {
+    return await client.collections('rules').documents().import(ndjson, { action: 'upsert' });
+  } catch (err) {
+    if (
+      attempt <= MAX_RETRIES &&
+      (err.message.includes('502') || err.message.includes('503'))
+    ) {
+      console.warn(`⚠️ Import failed with ${err.message}. Retrying in ${RETRY_DELAY_MS}ms (Attempt ${attempt}/${MAX_RETRIES})...`);
+      await delay(RETRY_DELAY_MS);
+      return safeImport(ndjson, attempt + 1);
+    }
+    throw err;
+  }
+}
 
 async function indexRules() {
   try {
     console.log('🔧 Checking Typesense connection...');
     const collections = await client.collections().retrieve();
-    console.log('✅ Existing Collections:', collections.map(c => c.name));
+    console.log('✅ Existing Collections:', collections.map((c) => c.name));
 
     const allDocs = [];
 
@@ -68,12 +89,10 @@ async function indexRules() {
       const batch = allDocs.slice(i, i + BATCH_SIZE);
       const ndjson = batch.map((doc) => JSON.stringify(doc)).join('\n');
 
-      const result = await client
-        .collections('rules')
-        .documents()
-        .import(ndjson, { action: 'upsert' });
+      await safeImport(ndjson);
 
       console.log(`✅ Indexed batch ${i / BATCH_SIZE + 1}: ${batch.length} documents.`);
+      await delay(DELAY_BETWEEN_BATCHES_MS);
     }
 
     console.log('🎉 All documents indexed successfully.');
