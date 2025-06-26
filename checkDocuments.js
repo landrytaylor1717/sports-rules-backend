@@ -12,11 +12,15 @@ const client = new Typesense.Client({
     },
   ],
   apiKey: process.env.TYPESENSE_API_KEY,
-  connectionTimeoutSeconds: 2,
+  connectionTimeoutSeconds: 5,
 });
 
 async function listDocuments() {
   try {
+    console.log('🔧 Checking existing collections...');
+    const collections = await client.collections().retrieve();
+    console.log('✅ Collections:', collections.map(c => c.name));
+
     const documents = await client.collections('rules').documents().search({
       q: '*',
       query_by: 'combined,title,content',

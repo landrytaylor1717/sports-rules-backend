@@ -18,7 +18,7 @@ const client = new Typesense.Client({
     },
   ],
   apiKey: process.env.TYPESENSE_API_KEY,
-  connectionTimeoutSeconds: 2,
+  connectionTimeoutSeconds: 5,
 });
 
 const ruleSources = [
@@ -31,6 +31,10 @@ const ruleSources = [
 
 async function indexRules() {
   try {
+    console.log('🔧 Checking Typesense connection...');
+    const collections = await client.collections().retrieve();
+    console.log('✅ Existing Collections:', collections.map(c => c.name));
+
     const allDocs = [];
 
     for (const { file, sport, path: routePath } of ruleSources) {
@@ -56,6 +60,8 @@ async function indexRules() {
       return;
     }
 
+    console.log(`📦 Preparing to index ${allDocs.length} documents...`);
+
     const ndjson = allDocs.map((doc) => JSON.stringify(doc)).join('\n');
 
     const result = await client
@@ -63,8 +69,7 @@ async function indexRules() {
       .documents()
       .import(ndjson, { action: 'upsert' });
 
-    console.log(`✅ Indexed ${allDocs.length} documents.`);
-    console.log('Sample response:', result.slice(0, 5));
+    console.log(`✅ Indexing complete. First 5 results:\n`, result.slice(0, 5));
   } catch (err) {
     console.error('❌ Failed to index rules:', err?.message || err);
   }
