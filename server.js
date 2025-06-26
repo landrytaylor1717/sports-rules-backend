@@ -11,6 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Initialize Typesense
 const client = new Typesense.Client({
   nodes: [
     {
@@ -23,14 +24,15 @@ const client = new Typesense.Client({
   connectionTimeoutSeconds: 2,
 });
 
+// Initialize Pinecone with updated controllerHostUrl
 const pineconeClient = new pinecone.Pinecone({
   apiKey: process.env.PINECONE_API_KEY,
-  environment: process.env.PINECONE_ENVIRONMENT,
+  controllerHostUrl: `https://controller.${process.env.PINECONE_ENVIRONMENT}.pinecone.io`,
 });
-
 
 const pineconeIndex = pineconeClient.Index('sports-rules');
 
+// Typesense Search Route
 app.get('/search', async (req, res) => {
   const query = req.query.q?.trim() || '';
   const sportFilter = req.query.sport?.trim() || '';
@@ -67,6 +69,7 @@ app.get('/search', async (req, res) => {
   }
 });
 
+// AI Search Route using Pinecone
 app.post('/search-ai', async (req, res) => {
   const { question } = req.body;
 
@@ -83,6 +86,7 @@ app.post('/search-ai', async (req, res) => {
   }
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
