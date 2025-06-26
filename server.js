@@ -1,9 +1,10 @@
-import { Pinecone } from '@pinecone-database/pinecone';
+import pkg from '@pinecone-database/pinecone';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import Typesense from 'typesense';
 import aiHelper from './aiHelper.js';
+const { Pinecone } = pkg;
 
 dotenv.config();
 
