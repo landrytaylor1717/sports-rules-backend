@@ -1,12 +1,15 @@
+import { Pinecone } from '@pinecone-database/pinecone';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import Typesense from 'typesense';
+import aiHelper from './backend/aiHelper.js';
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const client = new Typesense.Client({
   nodes: [
@@ -19,6 +22,13 @@ const client = new Typesense.Client({
   apiKey: process.env.TYPESENSE_API_KEY,
   connectionTimeoutSeconds: 2,
 });
+
+const pinecone = new Pinecone({
+  apiKey: process.env.PINECONE_API_KEY,
+  environment: process.env.PINECONE_ENVIRONMENT,
+});
+
+const pineconeIndex = pinecone.Index('sports-rules');
 
 app.get('/search', async (req, res) => {
   const query = req.query.q?.trim() || '';
@@ -56,9 +66,25 @@ app.get('/search', async (req, res) => {
   }
 });
 
+app.post('/search-ai', async (req, res) => {
+  const { question } = req.body;
+
+  if (!question) {
+    return res.status(400).json({ error: 'Question is required' });
+  }
+
+  try {
+    const answer = await aiHelper.answerQuestion(question, pineconeIndex);
+    res.json(answer);
+  } catch (error) {
+    console.error('AI Search Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
 
 
