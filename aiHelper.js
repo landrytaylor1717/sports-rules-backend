@@ -10,7 +10,9 @@ export default {
       includeMetadata: true,
     });
 
-    const topChunks = queryResponse.matches.map((m) => m.metadata.content).join('\n\n');
+    const topChunks = queryResponse.matches
+      .map((m) => m.metadata?.content || '')
+      .join('\n\n');
 
     const prompt = `You are a sports rule expert. Using the following rulebook content, answer the user's question clearly and accurately. Do not invent information not found in the rules.
 
