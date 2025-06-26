@@ -7,11 +7,19 @@
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": ["typesense", "sports", "rules", "backend"],
-  "author": "Your Name",
+  "keywords": [
+    "typesense",
+    "pinecone",
+    "sports",
+    "rules",
+    "backend",
+    "express",
+    "ai"
+  ],
+  "author": "Landry Taylor",
   "license": "ISC",
   "dependencies": {
-    "@pinecone-database/pinecone": "^0.2.2",
+    "@pinecone-database/pinecone": "^6.1.1",
     "axios": "^1.6.8",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",

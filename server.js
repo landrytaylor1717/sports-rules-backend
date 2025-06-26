@@ -23,13 +23,14 @@ const client = new Typesense.Client({
   connectionTimeoutSeconds: 2,
 });
 
-const pineconeClient = pinecone.init({
+const pineconeClient = new pinecone.PineconeClient();
+
+await pineconeClient.init({
   apiKey: process.env.PINECONE_API_KEY,
   environment: process.env.PINECONE_ENVIRONMENT,
 });
 
-const pineconeIndex = pineconeClient.Index('sports-rules');
-
+const pineconeIndex = pineconeClient.index('sports-rules');
 
 app.get('/search', async (req, res) => {
   const query = req.query.q?.trim() || '';

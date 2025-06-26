@@ -22,17 +22,20 @@ async function listDocuments() {
       query_by: 'combined,title,content',
       per_page: 50,
     });
-    console.log(`✅ ${documents.hits.length} documents found.`);
-    documents.hits.forEach((hit, index) => {
+
+    console.log(`✅ ${documents.hits?.length || 0} documents found.`);
+
+    documents.hits?.forEach((hit, index) => {
+      const doc = hit.document;
       console.log(`\n📄 Document #${index + 1}:`);
-      console.log('Number:', hit.document.number);
-      console.log('Title:', hit.document.title);
-      console.log('Sport:', hit.document.sport);
-      console.log('Content snippet:', (hit.document.content || '').substring(0, 100) + '...');
-      console.log('Path:', hit.document.path);
+      console.log(`Number: ${doc.number}`);
+      console.log(`Title: ${doc.title}`);
+      console.log(`Sport: ${doc.sport}`);
+      console.log(`Content snippet: ${(doc.content || '').substring(0, 100)}...`);
+      console.log(`Path: ${doc.path}`);
     });
   } catch (error) {
-    console.error('❌ Error fetching documents:', error);
+    console.error('❌ Error fetching documents:', error?.message || error);
   }
 }
 

@@ -34,13 +34,26 @@ async function indexRules() {
     const allDocs = [];
 
     for (const { file, sport, path: routePath } of ruleSources) {
-      const ruleFile = await import(file);
+      const filePath = path.join(__dirname, file);
+      const ruleFile = await import(filePath);
       const ruleSet = Object.values(ruleFile)[0];
+
+      if (!Array.isArray(ruleSet)) {
+        console.warn(`⚠️ Skipping ${sport} - expected an array of rules.`);
+        continue;
+      }
 
       ruleSet.forEach((rule) => {
         const parsed = parseRuleContent(rule, sport, `${routePath}${rule.number}`);
         allDocs.push(...parsed);
       });
+
+      console.log(`✅ Loaded ${ruleSet.length} ${sport} rules.`);
+    }
+
+    if (allDocs.length === 0) {
+      console.warn('⚠️ No documents to index. Check your rule files.');
+      return;
     }
 
     const ndjson = allDocs.map((doc) => JSON.stringify(doc)).join('\n');
@@ -51,9 +64,9 @@ async function indexRules() {
       .import(ndjson, { action: 'upsert' });
 
     console.log(`✅ Indexed ${allDocs.length} documents.`);
-    console.log('Sample output:', result.slice(0, 5));
+    console.log('Sample response:', result.slice(0, 5));
   } catch (err) {
-    console.error('❌ Failed to index rules:', err);
+    console.error('❌ Failed to index rules:', err?.message || err);
   }
 }
 

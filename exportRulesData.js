@@ -1,55 +1,61 @@
 // backend/exportRulesData.js
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { parseRuleContent } from '../utils/parseRuleContent.js';
+
 import { baseballRules } from '../data/rules/baseball.js';
 import { basketballRules } from '../data/rules/basketball.js';
 import { footballRules } from '../data/rules/football.js';
 import { golfRules } from '../data/rules/golf.js';
 import { hockeyRules } from '../data/rules/hockey.js';
-import { parseRuleContent } from '../utils/parseRuleContent.js'; // adjust if needed
+
+// Resolve __dirname for ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const sportsData = [
-  { data: baseballRules, sport: 'Baseball', path: '/rules/baseballrules' },
-  { data: basketballRules, sport: 'Basketball', path: '/rules/basketballrules' },
-  { data: footballRules, sport: 'Football', path: '/rules/footballrules' },
-  { data: hockeyRules, sport: 'Hockey', path: '/rules/hockeyrules' },
-  { data: golfRules, sport: 'Golf', path: '/rules/golfrules' },
+  { rules: baseballRules, sport: 'Baseball', route: '/rules/baseballrules' },
+  { rules: basketballRules, sport: 'Basketball', route: '/rules/basketballrules' },
+  { rules: footballRules, sport: 'Football', route: '/rules/footballrules' },
+  { rules: hockeyRules, sport: 'Hockey', route: '/rules/hockeyrules' },
+  { rules: golfRules, sport: 'Golf', route: '/rules/golfrules' },
 ];
 
-let allSubrules = [];
+const allParsedRules = [];
 let idCounter = 0;
 
-for (const { data, sport, path: routePath } of sportsData) {
-  data.forEach((rule) => {
-    const parsed = parseRuleContent(rule, sport, `${routePath}/${rule.number}`) || [];
+for (const { rules, sport, route } of sportsData) {
+  for (const rule of rules) {
+    const parsedSubrules = parseRuleContent(rule, sport, `${route}/${rule.number}`) || [];
 
-    parsed.forEach((subrule) => {
-      if (!subrule) return; // Skip null entries
+    for (const subrule of parsedSubrules) {
+      if (!subrule) continue;
 
       idCounter++;
 
-      allSubrules.push({
+      allParsedRules.push({
         id: `${sport.toLowerCase()}-${idCounter}`,
         sport,
         number: subrule.number || 'N/A',
         title: subrule.title?.trim() || '(Untitled)',
         content: subrule.content?.trim() || '',
-        path: subrule.path || `${routePath}/${subrule.number}`,
+        path: subrule.path || `${route}/${subrule.number}`,
         combined: subrule.combined || `${subrule.number} ${subrule.title} ${subrule.content}`,
       });
-    });
-  });
+    }
+  }
 }
 
-
-const outputDir = path.resolve('data');
+// Output to project root /data directory
+const outputDir = path.resolve(__dirname, '../data');
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir, { recursive: true });
 }
 
 const outputPath = path.join(outputDir, 'rulesData.json');
-fs.writeFileSync(outputPath, JSON.stringify(allSubrules, null, 2));
+fs.writeFileSync(outputPath, JSON.stringify(allParsedRules, null, 2));
 
-console.log(`✅ Exported ${allSubrules.length} parsed rules to ${outputPath}`);
+console.log(`✅ Exported ${allParsedRules.length} parsed rules to ${outputPath}`);
 
 
