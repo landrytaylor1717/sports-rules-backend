@@ -29,6 +29,8 @@ const ruleSources = [
   { file: '../data/rules/golf.js', sport: 'Golf', path: '/rules/golfrules/' },
 ];
 
+const BATCH_SIZE = 200;  // Adjust based on container size — smaller for low-resource environments
+
 async function indexRules() {
   try {
     console.log('🔧 Checking Typesense connection...');
@@ -60,16 +62,21 @@ async function indexRules() {
       return;
     }
 
-    console.log(`📦 Preparing to index ${allDocs.length} documents...`);
+    console.log(`📦 Preparing to index ${allDocs.length} documents in batches of ${BATCH_SIZE}...`);
 
-    const ndjson = allDocs.map((doc) => JSON.stringify(doc)).join('\n');
+    for (let i = 0; i < allDocs.length; i += BATCH_SIZE) {
+      const batch = allDocs.slice(i, i + BATCH_SIZE);
+      const ndjson = batch.map((doc) => JSON.stringify(doc)).join('\n');
 
-    const result = await client
-      .collections('rules')
-      .documents()
-      .import(ndjson, { action: 'upsert' });
+      const result = await client
+        .collections('rules')
+        .documents()
+        .import(ndjson, { action: 'upsert' });
 
-    console.log(`✅ Indexing complete. First 5 results:\n`, result.slice(0, 5));
+      console.log(`✅ Indexed batch ${i / BATCH_SIZE + 1}: ${batch.length} documents.`);
+    }
+
+    console.log('🎉 All documents indexed successfully.');
   } catch (err) {
     console.error('❌ Failed to index rules:', err?.message || err);
   }
