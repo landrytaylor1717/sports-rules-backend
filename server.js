@@ -23,12 +23,11 @@ const client = new Typesense.Client({
   connectionTimeoutSeconds: 2,
 });
 
-const pineconeClient = new pinecone.Pinecone();
-
-await pineconeClient.init({
+const pineconeClient = new pinecone.Pinecone({
   apiKey: process.env.PINECONE_API_KEY,
   environment: process.env.PINECONE_ENVIRONMENT,
 });
+
 
 const pineconeIndex = pineconeClient.Index('sports-rules');
 
