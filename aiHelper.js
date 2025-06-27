@@ -3,58 +3,51 @@ import axios from 'axios';
 export default {
   async answerQuestion(question, pineconeIndex, sport = null) {
     try {
-      // Get embedding for the enhanced question
+      console.log('🤖 Step 1: Getting embedding...');
       const embedding = await this.getEmbedding(question);
-      
-      // Build query parameters for Pinecone
+      console.log('🤖 Step 2: Got embedding of length:', embedding.length);
+
       const queryParams = {
         vector: embedding,
-        topK: 5, // Increased from 3 to get more diverse results
+        topK: 5,
         includeMetadata: true,
       };
-      
-      // Add sport-specific filtering if sport is detected
+
       if (sport) {
         queryParams.filter = {
           sport: { "$eq": sport }
         };
         console.log('🏀 Applying sport filter:', sport);
       }
-      
-      console.log('🔍 Pinecone query params:', queryParams);
-      
+
+      console.log('🤖 Step 3: Querying Pinecone with params:', queryParams);
       const queryResponse = await pineconeIndex.query(queryParams);
-      
-      console.log('🔍 Pinecone results count:', queryResponse.matches?.length || 0);
-      console.log('🔍 Pinecone match scores:', queryResponse.matches?.map(m => m.score) || []);
-      
-      // If sport-specific search didn't return good results, try without filter
+      console.log('🤖 Step 4: Pinecone returned', queryResponse.matches?.length || 0, 'matches');
+
       let fallbackResults = null;
       if (sport && queryResponse.matches.length < 2) {
-        console.log('🔄 Sport-specific search had few results, trying fallback...');
+        console.log('🔄 Few sport-specific results, trying fallback without filter...');
         fallbackResults = await pineconeIndex.query({
           vector: embedding,
           topK: 5,
           includeMetadata: true,
         });
-        console.log('🔄 Fallback results count:', fallbackResults.matches?.length || 0);
+        console.log('🔄 Fallback returned', fallbackResults.matches?.length || 0, 'matches');
       }
-      
-      // Use the better result set
-      const finalResults = (fallbackResults && fallbackResults.matches.length > queryResponse.matches.length) 
-        ? fallbackResults 
+
+      const finalResults = (fallbackResults && fallbackResults.matches.length > queryResponse.matches.length)
+        ? fallbackResults
         : queryResponse;
-      
-      // Extract and prioritize content
+
       const topChunks = this.processAndRankResults(finalResults.matches, sport, question);
-      
+
       if (!topChunks || topChunks.trim().length === 0) {
         return { answer: "I couldn't find relevant information in the rulebook to answer your question." };
       }
-      
-      // Enhanced prompt with sport context
+
       const prompt = this.buildEnhancedPrompt(topChunks, question, sport);
-      
+
+      console.log('🤖 Step 5: Sending prompt to OpenAI...');
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -67,44 +60,43 @@ export default {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
         }
       );
-      
-      const aiAnswer = response.data.choices[0].message.content.trim();
+
+      const aiAnswer = response.data.choices?.[0]?.message?.content?.trim();
+      console.log('🤖 Step 6: OpenAI returned answer:', aiAnswer);
+
+      if (!aiAnswer) {
+        return { answer: "I couldn't generate a clear answer based on the rulebook content." };
+      }
+
       return { answer: aiAnswer };
-      
+
     } catch (error) {
       console.error('❌ Error in answerQuestion:', error);
       throw error;
     }
   },
 
-  // Process and rank results based on sport relevance and content quality
   processAndRankResults(matches, sport, question) {
-    if (!matches || matches.length === 0) {
-      return '';
-    }
-    
-    // Score and sort matches
+    if (!matches || matches.length === 0) return '';
+
     const scoredMatches = matches.map(match => {
       let relevanceScore = match.score || 0;
       const content = match.metadata?.content || '';
       const matchSport = match.metadata?.sport || '';
-      
-      // Boost score if sport matches
+
       if (sport && matchSport.toLowerCase() === sport.toLowerCase()) {
         relevanceScore += 0.1;
       }
-      
-      // Boost score for longer, more detailed content
+
       if (content.length > 200) {
         relevanceScore += 0.05;
       }
-      
-      // Boost score if question keywords appear in content
+
       const questionWords = question.toLowerCase().split(' ').filter(word => word.length > 3);
       const contentLower = content.toLowerCase();
       const keywordMatches = questionWords.filter(word => contentLower.includes(word)).length;
       relevanceScore += (keywordMatches * 0.02);
-      
+
       return {
         ...match,
         relevanceScore,
@@ -112,27 +104,23 @@ export default {
         sport: matchSport
       };
     });
-    
-    // Sort by relevance score
+
     scoredMatches.sort((a, b) => b.relevanceScore - a.relevanceScore);
-    
+
     console.log('🎯 Ranked results:', scoredMatches.map(m => ({
       sport: m.sport,
       score: m.relevanceScore.toFixed(3),
       contentLength: m.content.length
     })));
-    
-    // Take top 3 results and combine
+
     return scoredMatches
       .slice(0, 3)
       .map(m => `[${m.sport?.toUpperCase() || 'GENERAL'}] ${m.content}`)
       .join('\n\n---\n\n');
   },
 
-  // Build enhanced prompt with sport context
   buildEnhancedPrompt(topChunks, question, sport) {
     const sportContext = sport ? `The user is asking specifically about ${sport} rules. ` : '';
-    
     return `You are a comprehensive sports rule expert with deep knowledge across all major sports. ${sportContext}Using the following rulebook content, answer the user's question clearly and accurately.
 
 IMPORTANT INSTRUCTIONS:
@@ -153,9 +141,8 @@ ANSWER:`;
 
   async getEmbedding(text) {
     try {
-      // Pre-process text to ensure good embeddings
       const processedText = this.preprocessTextForEmbedding(text);
-      
+
       const response = await axios.post(
         'https://api.openai.com/v1/embeddings',
         {
@@ -166,29 +153,18 @@ ANSWER:`;
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
         }
       );
-      
-      return response.data.data[0].embedding;
+
+      return response.data.data?.[0]?.embedding;
     } catch (error) {
       console.error('❌ Error getting embedding:', error);
       throw error;
     }
   },
 
-  // Preprocess text to improve embedding quality
   preprocessTextForEmbedding(text) {
-    // Remove extra whitespace and normalize
-    let processed = text.trim().replace(/\s+/g, ' ');
-    
-    
-    for (const [abbrev, expansion] of Object.entries(expansions)) {
-      const regex = new RegExp(`\\b${abbrev}\\b`, 'gi');
-      processed = processed.replace(regex, `${abbrev} ${expansion}`);
-    }
-    
-    return processed;
+    return text.trim().replace(/\s+/g, ' ');
   },
 
-  // Utility method to test sport detection and enhancement
   async testSportEnhancement(question, sport) {
     const embedding = await this.getEmbedding(question);
     return {
