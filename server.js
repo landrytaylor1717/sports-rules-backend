@@ -31,6 +31,46 @@ const pineconeClient = new Pinecone({
 
 const pineconeIndex = pineconeClient.index('sports-rules');
 
+// Sports terminology mapping for query enhancement
+const sportsTerminology = {
+  baseball: ['baseball', 'ballgame', 'innings', 'strikes', 'balls', 'home run', 'RBI', 'pitcher', 'batter', 'diamond', 'mound', 'bases'],
+  basketball: ['basketball', 'hoops', 'court', 'dribble', 'slam dunk', 'three-pointer', 'foul', 'rebound', 'assist'],
+  hockey: ['hockey', 'ice', 'puck', 'stick', 'goal', 'penalty', 'power play', 'face-off'],
+  golf: ['golf', 'course', 'hole', 'par', 'birdie', 'eagle', 'bogey', 'tee', 'green', 'fairway'],
+  football: ['football', 'NFL', 'touchdown', 'field goal', 'quarterback', 'down', 'yard', 'endzone']
+};
+
+// Function to enhance query with sport-specific terms
+function enhanceQueryWithSportsTerms(query) {
+  const lowerQuery = query.toLowerCase();
+  let enhancedTerms = [];
+  
+  // Check which sport terms are mentioned and add related terms
+  for (const [sport, terms] of Object.entries(sportsTerminology)) {
+    const mentionedTerms = terms.filter(term => lowerQuery.includes(term.toLowerCase()));
+    if (mentionedTerms.length > 0) {
+      // Add a few related terms to expand the search
+      enhancedTerms.push(...terms.slice(0, 3));
+      break; // Focus on the first sport detected
+    }
+  }
+  
+  return enhancedTerms.length > 0 ? `${query} ${enhancedTerms.join(' ')}` : query;
+}
+
+// Function to detect sport from query
+function detectSportFromQuery(query) {
+  const lowerQuery = query.toLowerCase();
+  
+  for (const [sport, terms] of Object.entries(sportsTerminology)) {
+    if (terms.some(term => lowerQuery.includes(term.toLowerCase()))) {
+      return sport === 'american_football' ? 'football' : sport;
+    }
+  }
+  
+  return null;
+}
+
 // Test endpoint to verify server is working
 app.get('/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
@@ -48,8 +88,12 @@ app.get('/search', async (req, res) => {
   }
 
   try {
+    // Enhance query with sports-specific terms
+    const enhancedQuery = enhanceQueryWithSportsTerms(query);
+    console.log('🔍 Enhanced query:', enhancedQuery);
+
     const searchParameters = {
-      q: query,
+      q: enhancedQuery,
       query_by: 'content, title, combined',
       query_by_weights: '4,3,2',
       per_page: 20,
@@ -76,11 +120,12 @@ app.get('/search', async (req, res) => {
   }
 });
 
-// AI Search Route using Pinecone
+// AI Search Route using Pinecone with enhanced sports handling
 app.post('/search-ai', async (req, res) => {
-  const { question } = req.body;
+  const { question, sport } = req.body;
   
   console.log('🤖 AI question received:', question);
+  console.log('🤖 Sport parameter:', sport);
   console.log('🤖 Request body:', req.body);
   
   if (!question) {
@@ -89,8 +134,16 @@ app.post('/search-ai', async (req, res) => {
   }
 
   try {
+    // Detect sport from query if not provided
+    const detectedSport = sport || detectSportFromQuery(question);
+    console.log('🤖 Detected/provided sport:', detectedSport);
+    
+    // Enhance the question with sport-specific terminology
+    const enhancedQuestion = enhanceQueryWithSportsTerms(question);
+    console.log('🤖 Enhanced question:', enhancedQuestion);
+    
     console.log('🤖 Calling aiHelper.answerQuestion...');
-    const answer = await aiHelper.answerQuestion(question, pineconeIndex);
+    const answer = await aiHelper.answerQuestion(enhancedQuestion, pineconeIndex, detectedSport);
     
     console.log('🤖 aiHelper returned:', answer);
     console.log('🤖 Type of answer:', typeof answer);
@@ -99,10 +152,10 @@ app.post('/search-ai', async (req, res) => {
     // Ensure we're returning the correct format
     if (answer && answer.answer) {
       console.log('✅ Sending AI response:', { answer: answer.answer });
-      res.json({ answer: answer.answer });
+      res.json({ answer: answer.answer, sport: detectedSport });
     } else {
       console.log('❌ No answer in response');
-      res.json({ answer: null });
+      res.json({ answer: null, sport: detectedSport });
     }
     
   } catch (error) {
@@ -132,6 +185,20 @@ app.get('/env-check', (req, res) => {
   res.json(envStatus);
 });
 
+// Debug endpoint to test sports term enhancement
+app.post('/test-sports-enhancement', (req, res) => {
+  const { query } = req.body;
+  const enhanced = enhanceQueryWithSportsTerms(query);
+  const detected = detectSportFromQuery(query);
+  
+  res.json({
+    original: query,
+    enhanced: enhanced,
+    detectedSport: detected,
+    sportsTerminology: sportsTerminology
+  });
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -139,8 +206,8 @@ app.listen(PORT, () => {
   console.log(`🔍 Health check: http://localhost:${PORT}/health`);
   console.log(`🧪 Test AI: http://localhost:${PORT}/test-ai`);
   console.log(`🔍 Env check: http://localhost:${PORT}/env-check`);
+  console.log(`🏀 Test sports enhancement: http://localhost:${PORT}/test-sports-enhancement`);
 });
-
 
 
 
