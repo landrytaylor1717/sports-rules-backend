@@ -25,7 +25,7 @@ async function createCollection() {
       { name: 'content', type: 'string', index: true, store: true, prefix: true },
       { name: 'combined', type: 'string', index: true, store: false },
       { name: 'sport', type: 'string', index: true, store: true, facet: true, prefix: true },
-      { name: 'path', type: 'string', index: false, store: true },
+      { name: 'path', type: 'string', index: false, store: true, optional: true }, // Added optional: true
     ],
     default_sorting_field: 'number',
     token_separators: ['-', '.', ':', '(', ')', ' '],
@@ -47,7 +47,6 @@ async function createCollection() {
 }
 
 createCollection();
-
 
 
 
