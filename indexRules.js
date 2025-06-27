@@ -13,8 +13,8 @@ const client = new Typesense.Client({
   nodes: [
     {
       host: process.env.TYPESENSE_HOST,
-      port: parseInt(process.env.TYPESENSE_PORT, 10),
-      protocol: process.env.TYPESENSE_PROTOCOL,
+      port: parseInt(process.env.TYPESENSE_PORT || '443', 10),
+      protocol: process.env.TYPESENSE_PROTOCOL || 'https',
     },
   ],
   apiKey: process.env.TYPESENSE_API_KEY,
@@ -29,7 +29,7 @@ const ruleSources = [
   { file: '../data/rules/golf.js', sport: 'Golf', path: '/rules/golfrules/' },
 ];
 
-const BATCH_SIZE = 100; // Small batch to reduce memory spikes
+const BATCH_SIZE = 100;
 const DELAY_BETWEEN_BATCHES_MS = 1500;
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 2000;
@@ -40,10 +40,7 @@ async function safeImport(ndjson, attempt = 1) {
   try {
     return await client.collections('rules').documents().import(ndjson, { action: 'upsert' });
   } catch (err) {
-    if (
-      attempt <= MAX_RETRIES &&
-      (err.message.includes('502') || err.message.includes('503'))
-    ) {
+    if (attempt <= MAX_RETRIES && (err.message.includes('502') || err.message.includes('503'))) {
       console.warn(`⚠️ Import failed with ${err.message}. Retrying in ${RETRY_DELAY_MS}ms (Attempt ${attempt}/${MAX_RETRIES})...`);
       await delay(RETRY_DELAY_MS);
       return safeImport(ndjson, attempt + 1);
@@ -56,7 +53,7 @@ async function indexRules() {
   try {
     console.log('🔧 Checking Typesense connection...');
     const collections = await client.collections().retrieve();
-    console.log('✅ Existing Collections:', collections.map((c) => c.name));
+    console.log('✅ Existing Collections:', collections.map(c => c.name));
 
     const allDocs = [];
 
@@ -87,7 +84,7 @@ async function indexRules() {
 
     for (let i = 0; i < allDocs.length; i += BATCH_SIZE) {
       const batch = allDocs.slice(i, i + BATCH_SIZE);
-      const ndjson = batch.map((doc) => JSON.stringify(doc)).join('\n');
+      const ndjson = batch.map(doc => JSON.stringify(doc)).join('\n');
 
       await safeImport(ndjson);
 
