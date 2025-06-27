@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import Typesense from 'typesense';
 
 dotenv.config();
+console.log("API KEY BEING USED:", process.env.TYPESENSE_API_KEY);
 
 const client = new Typesense.Client({
   nodes: [
