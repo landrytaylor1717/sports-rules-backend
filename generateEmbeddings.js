@@ -6,6 +6,7 @@ import { basketballRules } from '../data/rules/basketball.js';
 import { footballRules } from '../data/rules/football.js';
 import { golfRules } from '../data/rules/golf.js';
 import { hockeyRules } from '../data/rules/hockey.js';
+import { parseRuleContent } from '../utils/parseRuleContent.js'; // Adjust to your actual path
 
 dotenv.config();
 
@@ -32,28 +33,36 @@ async function generateEmbeddings() {
   for (const { sport, rules } of allRules) {
     for (const rule of rules) {
       try {
-        const text = `${rule.title}. ${rule.content}`;
-        const embedding = await getEmbedding(text);
-        
-        await index.upsert([
-          {
-            id: `${sport}-${rule.number}`,
-            values: embedding,
-            metadata: {
-              sport,
-              number: rule.number,
-              title: rule.title,
-              content: rule.content,
+        const docs = parseRuleContent(rule, sport, `/rules/${sport.toLowerCase()}rules/${rule.number}`);
+
+        if (!docs || docs.length === 0) {
+          console.warn(`⚠️ No parsed content for ${sport} Rule ${rule.number}`);
+          continue;
+        }
+
+        for (const doc of docs) {
+          const embedding = await getEmbedding(doc.combined);
+
+          await index.upsert([
+            {
+              id: doc.id,
+              values: embedding,
+              metadata: {
+                sport: doc.sport,
+                number: doc.number,
+                title: doc.title,
+                content: doc.content,
+                path: doc.path,
+              },
             },
-          },
-        ]);
-        
-        console.log(`✅ Embedded: ${sport} Rule ${rule.number}`);
+          ]);
+
+          console.log(`✅ Embedded: ${doc.id}`);
+          await sleep(2000); // Maintain safety for OpenAI rate limits
+        }
       } catch (error) {
-        console.error(`❌ Failed to embed: ${sport} Rule ${rule.number}`, error?.message || error);
+        console.error(`❌ Failed to embed or upsert for ${sport} Rule ${rule.number}`, error?.message || error);
       }
-      
-      await sleep(2000); // 2-second delay to reduce rate limit risk
     }
   }
   console.log('✅ All embeddings generated and upserted.');
@@ -65,7 +74,7 @@ async function getEmbedding(text, retries = 3) {
       'https://api.openai.com/v1/embeddings',
       {
         input: text,
-        model: 'text-embedding-3-small', // Updated model (or keep 'text-embedding-ada-002')
+        model: 'text-embedding-3-small', // Adjust model if needed
       },
       {
         headers: {
@@ -74,7 +83,7 @@ async function getEmbedding(text, retries = 3) {
         },
       }
     );
-    
+
     return response.data.data[0].embedding;
   } catch (error) {
     if (error.response?.status === 429 && retries > 0) {
