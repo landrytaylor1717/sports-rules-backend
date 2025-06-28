@@ -44,38 +44,40 @@ export default {
 
       console.log(`🎯 Top result score: ${topScore.toFixed(3)}`);
 
-      // Lower the threshold and add more validation
-      const CONFIDENCE_THRESHOLD = 0.65; // Lowered from 0.75
-      const MIN_CONTENT_LENGTH = 50; // Reduced from 100
+      // More reasonable thresholds
+      const CONFIDENCE_THRESHOLD = 0.5; // Lowered from 0.65
+      const MIN_CONTENT_LENGTH = 30; // Lowered from 50
 
       const topChunks = this.processAndRankResults(scoredMatches, sport, question);
       const hasRelevantContent = this.validateRulebookContent(topChunks, question);
 
-      // Always restrict to rulebook content - no general knowledge fallback
+      console.log('🔍 Content validation result:', hasRelevantContent);
+      console.log('🔍 Top chunks preview:', topChunks.substring(0, 200) + '...');
+
       let prompt;
 
-      if (topScore >= CONFIDENCE_THRESHOLD && hasRelevantContent) {
-        console.log('✅ Relevant rulebook content found...');
-        prompt = `You are a sports rulebook assistant. Answer ONLY using the provided rulebook content below. Do not use any outside knowledge or make assumptions.
+      // More lenient conditions - if we have ANY reasonable matches, use them
+      if ((topScore >= CONFIDENCE_THRESHOLD || scoredMatches.length > 0) && topChunks.trim().length > MIN_CONTENT_LENGTH) {
+        console.log('✅ Using rulebook content...');
+        prompt = `You are a sports rulebook assistant. Answer using the provided rulebook content below. 
 
-If the rulebook content doesn't fully answer the question, say: "Based on the available rulebook information, I can only provide a partial answer" and then provide what information is available.
-
-If the content is completely unrelated to the question, say: "I couldn't find relevant information in the rulebook to answer your question."
+If the content directly answers the question, provide a clear, complete answer.
+If the content only partially answers the question, provide what information is available and note what's missing.
+If the content seems unrelated, say you couldn't find relevant information.
 
 RULEBOOK CONTENT:
 ${topChunks}
 
 QUESTION: ${question}
 
-ANSWER (using only the rulebook content above):`;
+ANSWER:`;
       } else {
         console.log('⚠️ No relevant rulebook content found...');
-        // Don't provide any context that might lead to general answers
         prompt = `You are a sports rulebook assistant. The user asked: "${question}"
 
 I could not find relevant information in the sports rulebook database to answer this question. 
 
-Please respond with: "I couldn't find relevant information in the rulebook to answer your question. Please ask about specific sports rules and regulations that would be found in official rulebooks."`;
+Please respond with: "I couldn't find relevant information in the rulebook to answer your question. Please try rephrasing your question or ask about specific sports rules and regulations."`;
       }
 
       console.log('🤖 Step 5: Sending prompt to OpenAI...');
@@ -84,8 +86,8 @@ Please respond with: "I couldn't find relevant information in the rulebook to an
         {
           model: 'gpt-4o',
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1, // Lower temperature for more consistent responses
-          max_tokens: 600, // Reduced since we're being more restrictive
+          temperature: 0.2, // Slightly higher for more natural responses
+          max_tokens: 800, // Increased for more complete answers
         },
         {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -107,13 +109,14 @@ Please respond with: "I couldn't find relevant information in the rulebook to an
     }
   },
 
-  // New method to better validate if content is relevant to the question
+  // Improved validation - less strict but still focused on rulebook content
   validateRulebookContent(content, question) {
-    if (!content || content.trim().length < 50) {
+    if (!content || content.trim().length < 20) {
+      console.log('🔍 Validation failed: Content too short');
       return false;
     }
 
-    // Extract key terms from the question
+    // Extract key terms from the question (keep important words only)
     const questionWords = question.toLowerCase()
       .replace(/[^\w\s]/g, '')
       .split(' ')
@@ -121,29 +124,48 @@ Please respond with: "I couldn't find relevant information in the rulebook to an
 
     const contentLower = content.toLowerCase();
 
-    // Check if at least 2 key terms from question appear in content
+    // Check if at least 1 key term from question appears in content (was 2, too strict)
     const matchingWords = questionWords.filter(word => 
-      contentLower.includes(word)
+      contentLower.includes(word) || this.findSimilarWord(word, contentLower)
     );
 
     console.log('🔍 Question words:', questionWords);
     console.log('🔍 Matching words:', matchingWords);
 
-    // Also check for sports rule-related keywords in content
+    // Check for sports rule-related keywords in content
     const ruleKeywords = [
       'rule', 'regulation', 'foul', 'penalty', 'violation', 'legal', 'illegal',
       'player', 'team', 'game', 'match', 'court', 'field', 'ball', 'official',
-      'referee', 'umpire', 'timeout', 'substitution', 'score', 'point'
+      'referee', 'umpire', 'timeout', 'substitution', 'score', 'point', 'goal',
+      'down', 'yard', 'quarter', 'period', 'inning', 'set', 'serve', 'shot'
     ];
 
     const hasRuleKeywords = ruleKeywords.some(keyword => 
       contentLower.includes(keyword)
     );
 
-    return matchingWords.length >= 2 || hasRuleKeywords;
+    console.log('🔍 Has rule keywords:', hasRuleKeywords);
+    
+    // More lenient validation: pass if we have matching words OR rule keywords
+    const isValid = matchingWords.length >= 1 || hasRuleKeywords;
+    console.log('🔍 Final validation result:', isValid);
+    
+    return isValid;
   },
 
-  // Helper method to identify common stop words
+  // Helper to find similar words (basic fuzzy matching)
+  findSimilarWord(targetWord, content) {
+    if (targetWord === 'goal' && (content.includes('field goal') || content.includes('touchdown'))) {
+      return true;
+    }
+    if (targetWord === 'field' && content.includes('field goal')) {
+      return true;
+    }
+    // Add more specific term mappings as needed
+    return false;
+  },
+
+  // Updated stop words list
   isStopWord(word) {
     const stopWords = [
       'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
@@ -167,23 +189,26 @@ Please respond with: "I couldn't find relevant information in the rulebook to an
 
       // Boost sport-specific matches
       if (sport && matchSport.toLowerCase() === sport.toLowerCase()) {
-        relevanceScore += 0.15; // Increased boost
+        relevanceScore += 0.15;
       }
 
       // Boost longer, more detailed content
       if (content.length > 200) {
-        relevanceScore += 0.08;
+        relevanceScore += 0.05;
       }
 
-      // More sophisticated keyword matching
+      // Keyword matching with more weight
       const questionWords = question.toLowerCase()
         .replace(/[^\w\s]/g, '')
         .split(' ')
-        .filter(word => word.length > 3 && !this.isStopWord(word));
+        .filter(word => word.length > 2 && !this.isStopWord(word));
 
       const contentLower = content.toLowerCase();
-      const keywordMatches = questionWords.filter(word => contentLower.includes(word)).length;
-      relevanceScore += (keywordMatches * 0.05); // Increased weight
+      const keywordMatches = questionWords.filter(word => 
+        contentLower.includes(word) || this.findSimilarWord(word, contentLower)
+      ).length;
+      
+      relevanceScore += (keywordMatches * 0.08); // Increased weight for keyword matches
 
       return {
         ...match,
@@ -198,12 +223,17 @@ Please respond with: "I couldn't find relevant information in the rulebook to an
     console.log('🎯 Ranked results:', scoredMatches.map(m => ({
       sport: m.sport,
       score: m.relevanceScore.toFixed(3),
-      contentLength: m.content.length
+      contentLength: m.content.length,
+      originalScore: m.score?.toFixed(3)
     })));
 
+    // Return top 3 results with better formatting
     return scoredMatches
       .slice(0, 3)
-      .map(m => `[${m.sport?.toUpperCase() || 'GENERAL'}] ${m.content}`)
+      .map(m => {
+        const sportLabel = m.sport?.toUpperCase() || 'GENERAL';
+        return `[${sportLabel}] ${m.content.trim()}`;
+      })
       .join('\n\n---\n\n');
   },
 
