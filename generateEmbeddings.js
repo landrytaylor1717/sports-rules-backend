@@ -97,3 +97,4 @@ async function getEmbedding(text, retries = 3) {
 }
 
 generateEmbeddings().catch(console.error);
+
