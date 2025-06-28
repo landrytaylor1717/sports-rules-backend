@@ -39,7 +39,35 @@ export default {
         ? fallbackResults
         : queryResponse;
 
-      const topChunks = this.processAndRankResults(finalResults.matches, sport, question);
+      const scoredMatches = finalResults.matches || [];
+      const topScore = scoredMatches[0]?.score || 0;
+
+      console.log(`🎯 Top result score: ${topScore.toFixed(3)}`);
+
+      // Threshold for confidence in rulebook content
+      const CONFIDENCE_THRESHOLD = 0.75;
+
+      if (topScore < CONFIDENCE_THRESHOLD) {
+        console.log('⚠️ No strong rulebook match, using OpenAI general knowledge...');
+        const generalResponse = await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: `You are a sports expert. Answer this question clearly and accurately:\n\n${question}` }],
+            temperature: 0.2,
+            max_tokens: 800,
+          },
+          {
+            headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+          }
+        );
+
+        const aiAnswer = generalResponse.data.choices?.[0]?.message?.content?.trim();
+        return { answer: aiAnswer || "I couldn't generate a clear answer." };
+      }
+
+      // Process rulebook content normally
+      const topChunks = this.processAndRankResults(scoredMatches, sport, question);
 
       if (!topChunks || topChunks.trim().length === 0) {
         return { answer: "I couldn't find relevant information in the rulebook to answer your question." };
