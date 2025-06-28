@@ -44,37 +44,38 @@ export default {
 
       console.log(`🎯 Top result score: ${topScore.toFixed(3)}`);
 
-      const CONFIDENCE_THRESHOLD = 0.75;
+      // Lower the threshold and add more validation
+      const CONFIDENCE_THRESHOLD = 0.65; // Lowered from 0.75
+      const MIN_CONTENT_LENGTH = 50; // Reduced from 100
 
       const topChunks = this.processAndRankResults(scoredMatches, sport, question);
-      const hasGoodRulebookContent = topChunks && topChunks.trim().length > 100;
+      const hasRelevantContent = this.validateRulebookContent(topChunks, question);
 
+      // Always restrict to rulebook content - no general knowledge fallback
       let prompt;
 
-      if (topScore >= CONFIDENCE_THRESHOLD && hasGoodRulebookContent) {
-        console.log('✅ Confident rulebook content found, restricting answer to rulebook...');
-        prompt = `You are a sports rulebook expert. You can ONLY answer using the provided rulebook content. 
-If the rulebook content does not contain enough information, simply say: 
-"I couldn't find relevant information in the rulebook to answer your question."
+      if (topScore >= CONFIDENCE_THRESHOLD && hasRelevantContent) {
+        console.log('✅ Relevant rulebook content found...');
+        prompt = `You are a sports rulebook assistant. Answer ONLY using the provided rulebook content below. Do not use any outside knowledge or make assumptions.
+
+If the rulebook content doesn't fully answer the question, say: "Based on the available rulebook information, I can only provide a partial answer" and then provide what information is available.
+
+If the content is completely unrelated to the question, say: "I couldn't find relevant information in the rulebook to answer your question."
 
 RULEBOOK CONTENT:
 ${topChunks}
 
 QUESTION: ${question}
 
-ANSWER:`;
+ANSWER (using only the rulebook content above):`;
       } else {
-        console.log('⚠️ Rulebook match weak or missing, using OpenAI general knowledge...');
-        prompt = `You are a sports rulebook and general sports expert. The provided rulebook content may help answer the user's question, but you may also use your own knowledge to assist.
+        console.log('⚠️ No relevant rulebook content found...');
+        // Don't provide any context that might lead to general answers
+        prompt = `You are a sports rulebook assistant. The user asked: "${question}"
 
-If the rulebook content is incomplete, use your general sports knowledge to provide the most accurate, helpful answer possible. 
+I could not find relevant information in the sports rulebook database to answer this question. 
 
-RULEBOOK CONTENT (if any):
-${topChunks || 'None provided'}
-
-QUESTION: ${question}
-
-ANSWER:`;
+Please respond with: "I couldn't find relevant information in the rulebook to answer your question. Please ask about specific sports rules and regulations that would be found in official rulebooks."`;
       }
 
       console.log('🤖 Step 5: Sending prompt to OpenAI...');
@@ -83,8 +84,8 @@ ANSWER:`;
         {
           model: 'gpt-4o',
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-          max_tokens: 800,
+          temperature: 0.1, // Lower temperature for more consistent responses
+          max_tokens: 600, // Reduced since we're being more restrictive
         },
         {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -95,7 +96,7 @@ ANSWER:`;
       console.log('🤖 Step 6: OpenAI returned answer:', aiAnswer);
 
       if (!aiAnswer) {
-        return { answer: "I couldn't generate a clear answer based on the rulebook content." };
+        return { answer: "I couldn't find relevant information in the rulebook to answer your question." };
       }
 
       return { answer: aiAnswer };
@@ -106,6 +107,56 @@ ANSWER:`;
     }
   },
 
+  // New method to better validate if content is relevant to the question
+  validateRulebookContent(content, question) {
+    if (!content || content.trim().length < 50) {
+      return false;
+    }
+
+    // Extract key terms from the question
+    const questionWords = question.toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(' ')
+      .filter(word => word.length > 2 && !this.isStopWord(word));
+
+    const contentLower = content.toLowerCase();
+
+    // Check if at least 2 key terms from question appear in content
+    const matchingWords = questionWords.filter(word => 
+      contentLower.includes(word)
+    );
+
+    console.log('🔍 Question words:', questionWords);
+    console.log('🔍 Matching words:', matchingWords);
+
+    // Also check for sports rule-related keywords in content
+    const ruleKeywords = [
+      'rule', 'regulation', 'foul', 'penalty', 'violation', 'legal', 'illegal',
+      'player', 'team', 'game', 'match', 'court', 'field', 'ball', 'official',
+      'referee', 'umpire', 'timeout', 'substitution', 'score', 'point'
+    ];
+
+    const hasRuleKeywords = ruleKeywords.some(keyword => 
+      contentLower.includes(keyword)
+    );
+
+    return matchingWords.length >= 2 || hasRuleKeywords;
+  },
+
+  // Helper method to identify common stop words
+  isStopWord(word) {
+    const stopWords = [
+      'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+      'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must',
+      'can', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 'where', 'why', 'how',
+      'what', 'which', 'who', 'whom', 'whose', 'this', 'that', 'these', 'those',
+      'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
+      'my', 'your', 'his', 'her', 'its', 'our', 'their', 'a', 'an', 'as', 'at', 'by',
+      'for', 'from', 'in', 'into', 'of', 'on', 'to', 'with', 'about'
+    ];
+    return stopWords.includes(word.toLowerCase());
+  },
+
   processAndRankResults(matches, sport, question) {
     if (!matches || matches.length === 0) return '';
 
@@ -114,18 +165,25 @@ ANSWER:`;
       const content = match.metadata?.content || '';
       const matchSport = match.metadata?.sport || '';
 
+      // Boost sport-specific matches
       if (sport && matchSport.toLowerCase() === sport.toLowerCase()) {
-        relevanceScore += 0.1;
+        relevanceScore += 0.15; // Increased boost
       }
 
+      // Boost longer, more detailed content
       if (content.length > 200) {
-        relevanceScore += 0.05;
+        relevanceScore += 0.08;
       }
 
-      const questionWords = question.toLowerCase().split(' ').filter(word => word.length > 3);
+      // More sophisticated keyword matching
+      const questionWords = question.toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .split(' ')
+        .filter(word => word.length > 3 && !this.isStopWord(word));
+
       const contentLower = content.toLowerCase();
       const keywordMatches = questionWords.filter(word => contentLower.includes(word)).length;
-      relevanceScore += (keywordMatches * 0.02);
+      relevanceScore += (keywordMatches * 0.05); // Increased weight
 
       return {
         ...match,
