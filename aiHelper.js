@@ -44,36 +44,38 @@ export default {
 
       console.log(`🎯 Top result score: ${topScore.toFixed(3)}`);
 
-      // Threshold for confidence in rulebook content
       const CONFIDENCE_THRESHOLD = 0.75;
 
-      if (topScore < CONFIDENCE_THRESHOLD) {
-        console.log('⚠️ No strong rulebook match, using OpenAI general knowledge...');
-        const generalResponse = await axios.post(
-          'https://api.openai.com/v1/chat/completions',
-          {
-            model: 'gpt-4o',
-            messages: [{ role: 'user', content: `You are a sports expert. Answer this question clearly and accurately:\n\n${question}` }],
-            temperature: 0.2,
-            max_tokens: 800,
-          },
-          {
-            headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-          }
-        );
-
-        const aiAnswer = generalResponse.data.choices?.[0]?.message?.content?.trim();
-        return { answer: aiAnswer || "I couldn't generate a clear answer." };
-      }
-
-      // Process rulebook content normally
       const topChunks = this.processAndRankResults(scoredMatches, sport, question);
+      const hasGoodRulebookContent = topChunks && topChunks.trim().length > 100;
 
-      if (!topChunks || topChunks.trim().length === 0) {
-        return { answer: "I couldn't find relevant information in the rulebook to answer your question." };
+      let prompt;
+
+      if (topScore >= CONFIDENCE_THRESHOLD && hasGoodRulebookContent) {
+        console.log('✅ Confident rulebook content found, restricting answer to rulebook...');
+        prompt = `You are a sports rulebook expert. You can ONLY answer using the provided rulebook content. 
+If the rulebook content does not contain enough information, simply say: 
+"I couldn't find relevant information in the rulebook to answer your question."
+
+RULEBOOK CONTENT:
+${topChunks}
+
+QUESTION: ${question}
+
+ANSWER:`;
+      } else {
+        console.log('⚠️ Rulebook match weak or missing, using OpenAI general knowledge...');
+        prompt = `You are a sports rulebook and general sports expert. The provided rulebook content may help answer the user's question, but you may also use your own knowledge to assist.
+
+If the rulebook content is incomplete, use your general sports knowledge to provide the most accurate, helpful answer possible. 
+
+RULEBOOK CONTENT (if any):
+${topChunks || 'None provided'}
+
+QUESTION: ${question}
+
+ANSWER:`;
       }
-
-      const prompt = this.buildEnhancedPrompt(topChunks, question, sport);
 
       console.log('🤖 Step 5: Sending prompt to OpenAI...');
       const response = await axios.post(
@@ -145,26 +147,6 @@ export default {
       .slice(0, 3)
       .map(m => `[${m.sport?.toUpperCase() || 'GENERAL'}] ${m.content}`)
       .join('\n\n---\n\n');
-  },
-
-  buildEnhancedPrompt(topChunks, question, sport) {
-    const sportContext = sport ? `The user is asking specifically about ${sport} rules. ` : '';
-    return `You are a comprehensive sports rule expert with deep knowledge across all major sports. ${sportContext}Using the following rulebook content, answer the user's question clearly and accurately.
-
-IMPORTANT INSTRUCTIONS:
-- Focus on the specific sport mentioned in the question
-- If multiple sports are referenced in the content, prioritize the one most relevant to the question
-- Provide specific rule numbers, sections, or official terminology when available
-- Be precise and cite the exact rules when possible
-- If the content doesn't fully answer the question, say so clearly
-- Do not invent or assume information not found in the provided rules
-
-RULEBOOK CONTENT:
-${topChunks}
-
-QUESTION: ${question}
-
-ANSWER:`;
   },
 
   async getEmbedding(text) {
