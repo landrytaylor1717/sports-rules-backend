@@ -31,79 +31,41 @@ const pineconeClient = new Pinecone({
 
 const pineconeIndex = pineconeClient.index('sports-rules');
 
-// Sports terminology mapping for query enhancement
+// Simplified sports terminology mapping - focus on most common terms
 const sportsTerminology = {
-  baseball: ['baseball', 'ballgame', 'innings', 'strikes', 'balls', 'home run', 'RBI', 'pitcher', 'batter', 'diamond', 'mound', 'bases', 'foul ball', 'strike zone'],
-  basketball: ['basketball', 'hoops', 'court', 'dribble', 'slam dunk', 'three-pointer', 'foul', 'rebound', 'assist', 'field goal', 'free throw', 'technical foul'],
-  hockey: ['hockey', 'ice', 'puck', 'stick', 'goal', 'penalty', 'power play', 'face-off', 'icing', 'offside'],
-  golf: ['golf', 'course', 'hole', 'par', 'birdie', 'eagle', 'bogey', 'tee', 'green', 'fairway', 'stroke', 'handicap'],
-  football: ['football', 'NFL', 'touchdown', 'field goal', 'quarterback', 'down', 'yard', 'endzone', 'fumble', 'interception', 'sack'],
-  soccer: ['soccer', 'football', 'goal', 'penalty kick', 'offside', 'corner kick', 'yellow card', 'red card', 'goalkeeper'],
-  tennis: ['tennis', 'serve', 'ace', 'deuce', 'love', 'set', 'match', 'net', 'court', 'volley']
+  baseball: ['baseball', 'inning', 'strike', 'ball', 'home run', 'pitcher', 'batter', 'base', 'foul', 'diamond'],
+  basketball: ['basketball', 'court', 'dribble', 'dunk', 'three-pointer', 'foul', 'rebound', 'assist', 'free throw'],
+  hockey: ['hockey', 'puck', 'stick', 'goal', 'penalty', 'power play', 'face-off', 'icing', 'offside'],
+  golf: ['golf', 'hole', 'par', 'birdie', 'eagle', 'bogey', 'tee', 'green', 'fairway', 'stroke'],
+  football: ['football', 'touchdown', 'field goal', 'quarterback', 'down', 'yard', 'endzone', 'fumble', 'interception'],
+  soccer: ['soccer', 'football', 'goal', 'penalty kick', 'offside', 'corner kick', 'yellow card', 'red card'],
+  tennis: ['tennis', 'serve', 'ace', 'deuce', 'love', 'set', 'match', 'net', 'volley']
 };
 
-// Ambiguous terms that appear in multiple sports
+// Simplified ambiguous terms
 const ambiguousTerms = {
   'field goal': ['football', 'basketball'],
   'goal': ['hockey', 'soccer'],
   'foul': ['basketball', 'baseball'],
   'penalty': ['hockey', 'soccer', 'football'],
-  'serve': ['tennis', 'volleyball'],
-  'court': ['basketball', 'tennis'],
   'offside': ['hockey', 'soccer', 'football'],
-  'timeout': ['basketball', 'football', 'hockey'],
-  'substitution': ['soccer', 'basketball', 'hockey']
+  'timeout': ['basketball', 'football', 'hockey']
 };
 
-// Function to handle ambiguous queries
-function handleAmbiguousQuery(query) {
-  const lowerQuery = query.toLowerCase();
-  
-  for (const [term, sports] of Object.entries(ambiguousTerms)) {
-    if (lowerQuery.includes(term)) {
-      return {
-        term: term,
-        sports: sports,
-        isAmbiguous: true
-      };
-    }
-  }
-  return null;
-}
-
-// Function to enhance query with sport-specific terms
-function enhanceQueryWithSportsTerms(query, targetSport = null) {
-  const lowerQuery = query.toLowerCase();
-  let enhancedTerms = [];
-  
-  // If we have a target sport, prioritize its terms
-  if (targetSport && sportsTerminology[targetSport]) {
-    const sportTerms = sportsTerminology[targetSport];
-    const mentionedTerms = sportTerms.filter(term => lowerQuery.includes(term.toLowerCase()));
-    if (mentionedTerms.length > 0) {
-      enhancedTerms.push(...sportTerms.slice(0, 3));
-      return `${query} ${targetSport} ${enhancedTerms.join(' ')}`;
-    }
-  }
-  
-  // Check which sport terms are mentioned and add related terms
-  for (const [sport, terms] of Object.entries(sportsTerminology)) {
-    const mentionedTerms = terms.filter(term => lowerQuery.includes(term.toLowerCase()));
-    if (mentionedTerms.length > 0) {
-      // Add sport name and a few related terms to expand the search
-      enhancedTerms.push(sport, ...terms.slice(0, 2));
-      return `${query} ${sport} ${enhancedTerms.join(' ')}`;
-    }
-  }
-  
-  return query;
-}
-
-// Function to detect sport from query
+// Simplified sport detection
 function detectSportFromQuery(query) {
   const lowerQuery = query.toLowerCase();
+  
+  // Direct sport name detection first
+  for (const sport of Object.keys(sportsTerminology)) {
+    if (lowerQuery.includes(sport)) {
+      console.log('🏀 Direct sport detection:', sport);
+      return sport;
+    }
+  }
+  
+  // Term-based detection
   const detectedSports = [];
-
   for (const [sport, terms] of Object.entries(sportsTerminology)) {
     if (terms.some(term => lowerQuery.includes(term.toLowerCase()))) {
       detectedSports.push(sport);
@@ -111,19 +73,21 @@ function detectSportFromQuery(query) {
   }
 
   if (detectedSports.length === 1) {
+    console.log('🏀 Term-based sport detection:', detectedSports[0]);
     return detectedSports[0];
   }
 
-  return null; // Ambiguous or no detection
+  console.log('🏀 No clear sport detected, found:', detectedSports);
+  return null;
 }
 
-// Function to create sport-specific query variations for ambiguous terms
-function createSportSpecificQueries(query, sports) {
-  return sports.map(sport => ({
-    sport: sport,
-    query: `${query} in ${sport}`,
-    enhancedQuery: enhanceQueryWithSportsTerms(query, sport)
-  }));
+// Simplified query enhancement
+function enhanceQueryWithSportsTerms(query, targetSport = null) {
+  // Don't over-complicate - just add sport name if detected
+  if (targetSport) {
+    return `${query} ${targetSport}`;
+  }
+  return query;
 }
 
 // Test endpoint to verify server is working
@@ -131,7 +95,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
 });
 
-// Typesense Search Route
+// Typesense Search Route (simplified)
 app.get('/search', async (req, res) => {
   const query = req.query.q?.trim() || '';
   const sportFilter = req.query.sport?.trim() || '';
@@ -143,69 +107,8 @@ app.get('/search', async (req, res) => {
   }
 
   try {
-    let searchResults;
-    let enhancedQuery = query;
-
-    // Check if query is ambiguous and no sport filter is provided
-    if (!sportFilter) {
-      const ambiguousResult = handleAmbiguousQuery(query);
-      
-      if (ambiguousResult) {
-        console.log('🔍 Ambiguous query detected:', ambiguousResult);
-        
-        // Try searching each sport and combine results
-        const allHits = [];
-        
-        for (const sport of ambiguousResult.sports) {
-          enhancedQuery = enhanceQueryWithSportsTerms(query, sport);
-          console.log(`🔍 Searching ${sport} with query:`, enhancedQuery);
-          
-          const searchParameters = {
-            q: enhancedQuery,
-            query_by: 'content, title, combined',
-            query_by_weights: '4,3,2',
-            per_page: 10,
-            num_typos: 2,
-            filter_by: `sport:=${sport}`,
-            sort_by: '_text_match:desc',
-          };
-
-          try {
-            const sportResults = await client.collections('rules').documents().search(searchParameters);
-            const sportHits = sportResults.hits.map(({ document, text_match }) => ({
-              number: document.number,
-              title: document.title,
-              content: document.content,
-              sport: document.sport,
-              path: document.path,
-              text_match: text_match,
-              searchedSport: sport
-            }));
-            allHits.push(...sportHits);
-          } catch (sportError) {
-            console.log(`❌ Error searching ${sport}:`, sportError.message);
-          }
-        }
-        
-        // Sort combined results by text_match score
-        allHits.sort((a, b) => b.text_match - a.text_match);
-        
-        console.log('✅ Ambiguous search completed - Found', allHits.length, 'results');
-        return res.json({ 
-          hits: allHits.slice(0, 20), // Limit to top 20 results
-          isAmbiguous: true,
-          searchedSports: ambiguousResult.sports,
-          ambiguousTerm: ambiguousResult.term
-        });
-      }
-    }
-
-    // Regular search (non-ambiguous or sport filter provided)
-    enhancedQuery = enhanceQueryWithSportsTerms(query, sportFilter);
-    console.log('🔍 Enhanced query:', enhancedQuery);
-
     const searchParameters = {
-      q: enhancedQuery,
+      q: query,
       query_by: 'content, title, combined',
       query_by_weights: '4,3,2',
       per_page: 20,
@@ -214,7 +117,7 @@ app.get('/search', async (req, res) => {
       sort_by: '_text_match:desc',
     };
 
-    searchResults = await client.collections('rules').documents().search(searchParameters);
+    const searchResults = await client.collections('rules').documents().search(searchParameters);
     
     const hits = searchResults.hits.map(({ document }) => ({
       number: document.number,
@@ -232,119 +135,83 @@ app.get('/search', async (req, res) => {
   }
 });
 
-// AI Search Route using Pinecone with enhanced sports handling
+// Simplified AI Search Route
 app.post('/search-ai', async (req, res) => {
   const { question, sport } = req.body;
   
   console.log('🤖 AI question received:', question);
   console.log('🤖 Sport parameter:', sport);
   
-  if (!question) {
+  if (!question || question.trim() === '') {
     console.log('❌ No question provided');
     return res.status(400).json({ error: 'Question is required' });
   }
 
   try {
+    // Detect sport if not provided
     let detectedSport = sport || detectSportFromQuery(question);
-    let searchStrategy = 'single';
-    let finalAnswer = null;
-    let searchedSports = [];
+    console.log('🤖 Detected/provided sport:', detectedSport);
 
-    // Handle ambiguous queries
-    if (!detectedSport) {
-      const ambiguousResult = handleAmbiguousQuery(question);
-      
-      if (ambiguousResult) {
-        console.log('🤖 Ambiguous query detected:', ambiguousResult);
-        searchStrategy = 'multiple';
-        
-        // Try each sport and find the best answer
-        const sportQueries = createSportSpecificQueries(question, ambiguousResult.sports);
-        let bestAnswer = null;
-        let bestScore = 0;
-        
-        for (const sportQuery of sportQueries) {
-          try {
-            console.log(`🤖 Trying ${sportQuery.sport} with query:`, sportQuery.enhancedQuery);
-            const answer = await aiHelper.answerQuestion(sportQuery.enhancedQuery, pineconeIndex, sportQuery.sport);
-            
-            if (answer && answer.answer && answer.answer.trim() !== '') {
-              // Simple scoring based on answer length and confidence indicators
-              const score = answer.answer.length + (answer.confidence || 0) * 100;
-              
-              if (score > bestScore) {
-                bestScore = score;
-                bestAnswer = {
-                  ...answer,
-                  sport: sportQuery.sport,
-                  isAmbiguous: true,
-                  searchedSports: ambiguousResult.sports
-                };
-              }
-            }
-            
-            searchedSports.push(sportQuery.sport);
-          } catch (sportError) {
-            console.log(`❌ Error searching ${sportQuery.sport}:`, sportError.message);
-          }
-        }
-        
-        if (bestAnswer) {
-          finalAnswer = bestAnswer;
-          detectedSport = bestAnswer.sport;
-        }
-      }
-    }
-
-    // If no ambiguous result found or ambiguous search failed, try regular search
-    if (!finalAnswer) {
-      const enhancedQuestion = enhanceQueryWithSportsTerms(question, detectedSport);
-      console.log('🤖 Enhanced question:', enhancedQuestion);
-      
-      console.log('🤖 Calling aiHelper.answerQuestion...');
-      const answer = await aiHelper.answerQuestion(enhancedQuestion, pineconeIndex, detectedSport);
-      
-      if (answer && answer.answer) {
-        finalAnswer = {
-          ...answer,
-          sport: detectedSport,
-          isAmbiguous: false
-        };
-      }
+    // Try the AI helper directly first
+    console.log('🤖 Calling aiHelper.answerQuestion with original question...');
+    let answer = await aiHelper.answerQuestion(question, pineconeIndex, detectedSport);
+    
+    // If no good answer and we have a detected sport, try without sport filter as fallback
+    if ((!answer || !answer.answer || answer.answer.includes("couldn't find")) && detectedSport) {
+      console.log('🔄 Trying fallback without sport filter...');
+      answer = await aiHelper.answerQuestion(question, pineconeIndex, null);
     }
     
-    console.log('🤖 Final answer:', finalAnswer);
+    console.log('🤖 Final answer result:', answer);
     
-    if (finalAnswer && finalAnswer.answer) {
+    if (answer && answer.answer && answer.answer.trim() !== '') {
       console.log('✅ Sending AI response');
       res.json({ 
-        answer: finalAnswer.answer, 
+        answer: answer.answer, 
         sport: detectedSport,
-        isAmbiguous: finalAnswer.isAmbiguous || false,
-        searchedSports: searchedSports.length > 0 ? searchedSports : undefined,
-        searchStrategy: searchStrategy
+        timestamp: new Date().toISOString()
       });
     } else {
-      console.log('❌ No answer found');
+      console.log('❌ No valid answer found');
       res.json({ 
-        answer: "I couldn't find a specific answer to your question. Could you please specify which sport you're asking about?", 
-        sport: detectedSport,
-        isAmbiguous: true,
-        searchedSports: searchedSports
+        answer: "I couldn't find relevant information in the rulebook to answer your question. Please try rephrasing or be more specific about the sport and rule you're asking about.", 
+        sport: detectedSport
       });
     }
     
   } catch (error) {
     console.error('❌ AI Search Error:', error.message);
-    console.error('❌ Full error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Full error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'An error occurred while processing your question',
+      details: error.message 
+    });
   }
 });
 
 // Test endpoint for debugging
 app.post('/test-ai', async (req, res) => {
   console.log('🧪 Test AI endpoint called');
-  res.json({ answer: "This is a test AI response to verify the frontend works" });
+  try {
+    // Test with a simple question
+    const testQuestion = "what is a field goal";
+    console.log('🧪 Testing with question:', testQuestion);
+    
+    const result = await aiHelper.answerQuestion(testQuestion, pineconeIndex, 'football');
+    console.log('🧪 Test result:', result);
+    
+    res.json({ 
+      testQuestion: testQuestion,
+      result: result,
+      status: "Test completed successfully" 
+    });
+  } catch (error) {
+    console.error('🧪 Test error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      status: "Test failed" 
+    });
+  }
 });
 
 // Environment check endpoint
@@ -355,48 +222,57 @@ app.get('/env-check', (req, res) => {
     hasTypesense: !!process.env.TYPESENSE_API_KEY,
     typesenseHost: process.env.TYPESENSE_HOST,
     typesensePort: process.env.TYPESENSE_PORT,
+    openaiKeyLength: process.env.OPENAI_API_KEY?.length || 0,
+    pineconeKeyLength: process.env.PINECONE_API_KEY?.length || 0,
   };
   
   console.log('🔍 Environment check:', envStatus);
   res.json(envStatus);
 });
 
-// Debug endpoint to test sports term enhancement
+// Simplified debug endpoint
 app.post('/test-sports-enhancement', (req, res) => {
   const { query } = req.body;
-  const enhanced = enhanceQueryWithSportsTerms(query);
   const detected = detectSportFromQuery(query);
-  const ambiguous = handleAmbiguousQuery(query);
+  const enhanced = enhanceQueryWithSportsTerms(query, detected);
   
   res.json({
     original: query,
-    enhanced: enhanced,
     detectedSport: detected,
-    ambiguousResult: ambiguous,
-    sportsTerminology: sportsTerminology,
-    ambiguousTerms: ambiguousTerms
+    enhanced: enhanced,
+    availableSports: Object.keys(sportsTerminology)
   });
 });
 
-// New endpoint to test ambiguous query handling
-app.post('/test-ambiguous', (req, res) => {
-  const { query } = req.body;
-  const ambiguousResult = handleAmbiguousQuery(query);
-  
-  if (ambiguousResult) {
-    const sportQueries = createSportSpecificQueries(query, ambiguousResult.sports);
-    res.json({
-      original: query,
-      isAmbiguous: true,
-      ambiguousResult: ambiguousResult,
-      sportSpecificQueries: sportQueries
+// Pinecone connection test
+app.get('/test-pinecone', async (req, res) => {
+  try {
+    console.log('🧪 Testing Pinecone connection...');
+    
+    // Test the index stats
+    const stats = await pineconeIndex.describeIndexStats();
+    console.log('🧪 Pinecone stats:', stats);
+    
+    // Test a simple query
+    const testVector = new Array(1536).fill(0.1); // OpenAI embedding dimension
+    const testQuery = await pineconeIndex.query({
+      vector: testVector,
+      topK: 1,
+      includeMetadata: true
     });
-  } else {
+    
+    console.log('🧪 Test query result:', testQuery);
+    
     res.json({
-      original: query,
-      isAmbiguous: false,
-      detectedSport: detectSportFromQuery(query),
-      enhanced: enhanceQueryWithSportsTerms(query)
+      status: 'Pinecone connection successful',
+      stats: stats,
+      testQueryResults: testQuery.matches?.length || 0
+    });
+  } catch (error) {
+    console.error('🧪 Pinecone test error:', error);
+    res.status(500).json({
+      status: 'Pinecone connection failed',
+      error: error.message
     });
   }
 });
@@ -408,8 +284,7 @@ app.listen(PORT, () => {
   console.log(`🔍 Health check: http://localhost:${PORT}/health`);
   console.log(`🧪 Test AI: http://localhost:${PORT}/test-ai`);
   console.log(`🔍 Env check: http://localhost:${PORT}/env-check`);
-  console.log(`🏀 Test sports enhancement: http://localhost:${PORT}/test-sports-enhancement`);
-  console.log(`❓ Test ambiguous queries: http://localhost:${PORT}/test-ambiguous`);
+  console.log(`🧪 Test Pinecone: http://localhost:${PORT}/test-pinecone`);
+  console.log(`🏀 Debug sports: http://localhost:${PORT}/test-sports-enhancement`);
 });
-
 
