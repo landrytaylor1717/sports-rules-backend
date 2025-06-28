@@ -61,15 +61,21 @@ function enhanceQueryWithSportsTerms(query) {
 // Function to detect sport from query
 function detectSportFromQuery(query) {
   const lowerQuery = query.toLowerCase();
-  
+  const detectedSports = [];
+
   for (const [sport, terms] of Object.entries(sportsTerminology)) {
     if (terms.some(term => lowerQuery.includes(term.toLowerCase()))) {
-      return sport === 'american_football' ? 'football' : sport;
+      detectedSports.push(sport);
     }
   }
-  
-  return null;
+
+  if (detectedSports.length === 1) {
+    return detectedSports[0];
+  }
+
+  return null; // Ambiguous or no detection
 }
+
 
 // Test endpoint to verify server is working
 app.get('/health', (req, res) => {
