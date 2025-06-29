@@ -1,23 +1,71 @@
 import axios from 'axios';
 
 export default {
+  // Add sport detection method
+  detectSportFromQuestion(question) {
+    const sportKeywords = {
+      'golf': ['water hazard', 'green', 'tee', 'fairway', 'putt', 'golf ball', 'stroke', 'par', 'birdie', 'eagle', 'bunker', 'rough', 'club'],
+      'baseball': ['pitcher', 'batter', 'home plate', 'base', 'inning', 'strike', 'ball count', 'foul ball', 'home run', 'diamond'],
+      'football': ['touchdown', 'field goal', 'down', 'yard', 'quarterback', 'snap', 'penalty', 'endzone'],
+      'basketball': ['basket', 'hoop', 'court', 'dribble', 'foul', 'free throw', 'rebound', 'three-pointer'],
+      'tennis': ['serve', 'court', 'net', 'set', 'match', 'deuce', 'advantage', 'ace'],
+      'soccer': ['goal', 'offside', 'penalty kick', 'yellow card', 'red card', 'corner kick', 'free kick']
+    };
+
+    const questionLower = question.toLowerCase();
+    
+    // Check for explicit sport mentions first
+    for (const [sport, keywords] of Object.entries(sportKeywords)) {
+      if (questionLower.includes(sport)) {
+        console.log(`🎯 Detected sport from explicit mention: ${sport}`);
+        return sport;
+      }
+    }
+
+    // Then check for sport-specific keywords
+    const sportScores = {};
+    for (const [sport, keywords] of Object.entries(sportKeywords)) {
+      sportScores[sport] = keywords.filter(keyword => 
+        questionLower.includes(keyword.toLowerCase())
+      ).length;
+    }
+
+    // Find sport with highest keyword matches
+    const bestSport = Object.entries(sportScores)
+      .filter(([_, score]) => score > 0)
+      .sort(([_, a], [__, b]) => b - a)[0];
+
+    if (bestSport && bestSport[1] > 0) {
+      console.log(`🎯 Detected sport from keywords: ${bestSport[0]} (${bestSport[1]} matches)`);
+      return bestSport[0];
+    }
+
+    console.log('🤷 No specific sport detected');
+    return null;
+  },
+
   async answerQuestion(question, pineconeIndex, sport = null) {
     try {
       console.log('🤖 Step 1: Getting embedding...');
+      
+      // Auto-detect sport if not provided
+      const detectedSport = sport || this.detectSportFromQuestion(question);
+      console.log('🏀 Using sport:', detectedSport || 'none');
+
       const embedding = await this.getEmbedding(question);
       console.log('🤖 Step 2: Got embedding of length:', embedding.length);
 
       const queryParams = {
         vector: embedding,
-        topK: 8, // Increased from 5 to get more relevant chunks
+        topK: 8,
         includeMetadata: true,
       };
 
-      if (sport) {
+      if (detectedSport) {
         queryParams.filter = {
-          sport: { "$eq": sport }
+          sport: { "$eq": detectedSport }
         };
-        console.log('🏀 Applying sport filter:', sport);
+        console.log('🏀 Applying sport filter:', detectedSport);
       }
 
       console.log('🤖 Step 3: Querying Pinecone with params:', queryParams);
@@ -28,18 +76,18 @@ export default {
       if (queryResponse.matches?.length > 0) {
         console.log('🔍 DEBUG: First match details:');
         console.log('  - Score:', queryResponse.matches[0].score);
-        console.log('  - Metadata:', queryResponse.matches[0].metadata);
+        console.log('  - Sport:', queryResponse.matches[0].metadata?.sport);
         console.log('  - Content preview:', queryResponse.matches[0].metadata?.content?.substring(0, 150) + '...');
       } else {
         console.log('❌ DEBUG: No matches returned from Pinecone');
       }
 
       let fallbackResults = null;
-      if (sport && queryResponse.matches.length < 2) {
+      if (detectedSport && queryResponse.matches.length < 2) {
         console.log('🔄 Few sport-specific results, trying fallback without filter...');
         fallbackResults = await pineconeIndex.query({
           vector: embedding,
-          topK: 8, // Increased from 5 to match main query
+          topK: 8,
           includeMetadata: true,
         });
         console.log('🔄 Fallback returned', fallbackResults.matches?.length || 0, 'matches');
@@ -54,27 +102,23 @@ export default {
 
       console.log(`🎯 Top result score: ${topScore.toFixed(3)}`);
 
-      // MUCH more lenient thresholds
-      const CONFIDENCE_THRESHOLD = 0.2; // Even lower since we fixed the embedding model
-      const MIN_CONTENT_LENGTH = 15; // Lowered from 30
+      const CONFIDENCE_THRESHOLD = 0.2;
+      const MIN_CONTENT_LENGTH = 15;
 
-      const topChunks = this.processAndRankResults(scoredMatches, sport, question);
+      const topChunks = this.processAndRankResults(scoredMatches, detectedSport, question);
 
       console.log('🔍 Top chunks preview:', topChunks.substring(0, 200) + '...');
       console.log('🔍 Top chunks length:', topChunks.length);
-      console.log('🔍 Number of scored matches:', scoredMatches.length);
-      console.log('🔍 Top score:', topScore);
-      console.log('🔍 Will use content?', scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH);
 
-      // Declare the prompt variable
       let prompt;
 
-      // Much more lenient conditions - use results if we have ANY matches
       if (scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH) {
         console.log('✅ Using rulebook content...');
         
-        // Enhanced prompt that doesn't contradict itself
+        // Enhanced prompt with sport context
         prompt = `You are a sports rulebook assistant. Answer the question using ONLY the information provided in the rulebook content below. 
+
+${detectedSport ? `SPORT CONTEXT: This question appears to be about ${detectedSport.toUpperCase()}.` : ''}
 
 CRITICAL INSTRUCTIONS:
 - Base your answer ENTIRELY on the rulebook content provided
@@ -83,12 +127,9 @@ CRITICAL INSTRUCTIONS:
 - Then explain the related rules and how they might apply to the situation
 - Provide comprehensive, detailed answers when the content supports it
 - Include relevant context, examples, and specific rule citations when available
-- If the content fully answers the question, provide a complete and thorough answer
-- If the content partially answers the question, be explicit about what is directly covered vs. what is inferred from related rules
-- Be direct and helpful - if you have relevant information, share it confidently with full detail
+- If multiple sports are represented in the content, prioritize the most relevant sport based on the question context
 - When multiple rule sections are relevant, explain how they work together
 - Include any important exceptions, conditions, or special cases mentioned in the content
-- Always be clear about whether you're providing a direct answer or applying analogous rules
 
 RULEBOOK CONTENT:
 ${topChunks}
@@ -98,11 +139,12 @@ QUESTION: ${question}
 Based on the rulebook content above, provide a comprehensive answer with full details and context:`;
       } else {
         console.log('⚠️ No content found...');
+        const sportHint = detectedSport ? ` about ${detectedSport}` : '';
         prompt = `You are a sports rulebook assistant. The user asked: "${question}"
 
-I searched the sports rulebook database but could not find relevant information to answer this question. 
+I searched the sports rulebook database${sportHint} but could not find relevant information to answer this question. 
 
-Please respond with: "I couldn't find information about this topic in the available rulebook content. Please try rephrasing your question or ask about specific sports rules and regulations that might be covered in the database."`;
+Please respond with: "I couldn't find information about this topic in the available rulebook content${sportHint}. Please try rephrasing your question or ask about specific sports rules and regulations that might be covered in the database."`;
       }
 
       console.log('🤖 Step 5: Sending prompt to OpenAI...');
@@ -111,8 +153,8 @@ Please respond with: "I couldn't find information about this topic in the availa
         {
           model: 'gpt-4o',
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3, // Balanced for natural but consistent responses
-          max_tokens: 1500, // Increased from 1000 for more detailed responses
+          temperature: 0.3,
+          max_tokens: 1500,
         },
         {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -126,7 +168,11 @@ Please respond with: "I couldn't find information about this topic in the availa
         return { answer: "I couldn't find relevant information in the rulebook to answer your question." };
       }
 
-      return { answer: aiAnswer };
+      return { 
+        answer: aiAnswer,
+        detectedSport: detectedSport,
+        searchResultsCount: scoredMatches.length
+      };
 
     } catch (error) {
       console.error('❌ Error in answerQuestion:', error);
@@ -145,11 +191,9 @@ Please respond with: "I couldn't find information about this topic in the availa
     const scoredMatches = matches.map((match, index) => {
       let relevanceScore = match.score || 0;
       
-      // DEBUG: Check what's actually in the metadata
       console.log(`🔍 Match ${index + 1}:`, {
         score: match.score,
-        hasMetadata: !!match.metadata,
-        metadataKeys: match.metadata ? Object.keys(match.metadata) : [],
+        sport: match.metadata?.sport,
         contentPreview: match.metadata?.content?.substring(0, 50) + '...' || 'NO CONTENT'
       });
       
@@ -160,17 +204,18 @@ Please respond with: "I couldn't find information about this topic in the availa
         console.log(`⚠️ Match ${index + 1} has no content!`);
       }
 
-      // Boost sport-specific matches
+      // Boost sport-specific matches MORE aggressively
       if (sport && matchSport.toLowerCase() === sport.toLowerCase()) {
-        relevanceScore += 0.1;
+        relevanceScore += 0.3; // Increased from 0.1
+        console.log(`🎯 Boosting ${sport} match by 0.3`);
       }
 
-      // Boost longer, more detailed content (but don't penalize shorter content)
+      // Boost longer, more detailed content
       if (content.length > 200) {
         relevanceScore += 0.05;
       }
 
-      // Keyword matching - more generous
+      // Enhanced keyword matching
       const questionWords = question.toLowerCase()
         .replace(/[^\w\s]/g, '')
         .split(' ')
@@ -183,7 +228,6 @@ Please respond with: "I couldn't find information about this topic in the availa
         this.findPartialMatch(word, contentLower)
       ).length;
       
-      // Boost keyword matches but don't penalize non-matches too heavily
       if (keywordMatches > 0) {
         relevanceScore += (keywordMatches * 0.05);
       }
@@ -197,21 +241,20 @@ Please respond with: "I couldn't find information about this topic in the availa
       };
     });
 
+    // Sort by relevance score (sport-boosted matches should now rank higher)
     scoredMatches.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
     console.log('🎯 Ranked results:', scoredMatches.map(m => ({
       sport: m.sport,
       score: m.relevanceScore.toFixed(3),
-      contentLength: m.content.length,
       originalScore: m.score?.toFixed(3),
-      keywordMatches: m.keywordMatches,
-      hasContent: !!m.content
+      keywordMatches: m.keywordMatches
     })));
 
-    // Return top 5-6 results with better formatting
+    // Return top results with sport prioritization
     const result = scoredMatches
-      .slice(0, 6) // Increased from 4 to 6 for more comprehensive context
-      .filter(m => m.content) // Only include matches that actually have content
+      .slice(0, 6)
+      .filter(m => m.content)
       .map((m, index) => {
         const sportLabel = m.sport?.toUpperCase() || 'GENERAL';
         const scoreInfo = `(Score: ${m.relevanceScore.toFixed(3)})`;
@@ -223,16 +266,17 @@ Please respond with: "I couldn't find information about this topic in the availa
     return result;
   },
 
-  // Enhanced similarity matching
+  // Enhanced similarity matching with water hazard terms
   findSimilarWord(targetWord, content) {
-    // Sport-specific term mappings
     const termMappings = {
+      'water': ['water hazard', 'pond', 'lake', 'stream', 'river', 'lateral water hazard'],
+      'ball': ['golf ball', 'ball in water', 'lost ball'],
+      'hit': ['stroke', 'shot', 'play'],
+      'penalty': ['penalty stroke', 'drop', 'relief'],
       'goal': ['field goal', 'touchdown', 'scoring', 'endzone', 'goalpost'],
       'field': ['field goal', 'playing field', 'football field', 'gridiron'],
       'down': ['first down', 'second down', 'third down', 'fourth down', 'downs'],
-      'penalty': ['foul', 'violation', 'infraction', 'flag'],
       'player': ['players', 'team member', 'athlete'],
-      'ball': ['football', 'pigskin', 'possession'],
       'score': ['scoring', 'points', 'touchdown', 'field goal'],
       'time': ['clock', 'timer', 'timeout', 'quarter', 'period'],
       'pass': ['passing', 'throw', 'forward pass', 'incomplete'],
@@ -243,11 +287,9 @@ Please respond with: "I couldn't find information about this topic in the availa
     return mappings.some(term => content.includes(term));
   },
 
-  // Add partial matching for flexibility
   findPartialMatch(targetWord, content) {
     if (targetWord.length < 4) return false;
     
-    // Look for partial matches in longer words
     const words = content.split(/\s+/);
     return words.some(word => {
       const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
@@ -276,7 +318,7 @@ Please respond with: "I couldn't find information about this topic in the availa
         'https://api.openai.com/v1/embeddings',
         {
           input: processedText,
-          model: 'text-embedding-3-small', // Changed to match your stored embeddings
+          model: 'text-embedding-3-small',
         },
         {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -298,7 +340,7 @@ Please respond with: "I couldn't find information about this topic in the availa
     const embedding = await this.getEmbedding(question);
     return {
       originalQuestion: question,
-      detectedSport: sport,
+      detectedSport: sport || this.detectSportFromQuestion(question),
       processedText: this.preprocessTextForEmbedding(question),
       embeddingLength: embedding.length
     };
