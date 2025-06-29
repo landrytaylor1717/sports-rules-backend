@@ -69,6 +69,10 @@ async function indexRules() {
 
       ruleSet.forEach((rule) => {
         const parsed = parseRuleContent(rule, sport, `${routePath}${rule.number}`);
+        parsed.forEach(doc => {
+          doc.sport = sport.toLowerCase();
+          doc.combined = `${rule.title || ''} ${rule.content || ''} ${sport}`.trim();
+        });
         allDocs.push(...parsed);
       });
 
@@ -99,6 +103,7 @@ async function indexRules() {
 }
 
 indexRules();
+
 
 
 
