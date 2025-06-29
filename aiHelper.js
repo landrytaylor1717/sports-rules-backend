@@ -78,15 +78,17 @@ export default {
 
 CRITICAL INSTRUCTIONS:
 - Base your answer ENTIRELY on the rulebook content provided
+- If the rulebook content directly addresses the specific question, provide that exact answer
+- If the rulebook doesn't specifically address the question but contains related/analogous rules, clearly state: "The rulebook doesn't specifically address [specific scenario], but it does contain related rules that may apply:"
+- Then explain the related rules and how they might apply to the situation
 - Provide comprehensive, detailed answers when the content supports it
 - Include relevant context, examples, and specific rule citations when available
 - If the content fully answers the question, provide a complete and thorough answer
-- If the content partially answers the question, provide what information is available and clearly state what aspects aren't covered
-- Do NOT say "the rulebook doesn't contain information" if you're about to provide information from it
+- If the content partially answers the question, be explicit about what is directly covered vs. what is inferred from related rules
 - Be direct and helpful - if you have relevant information, share it confidently with full detail
 - When multiple rule sections are relevant, explain how they work together
 - Include any important exceptions, conditions, or special cases mentioned in the content
-- Only mention that information is missing if it truly is missing from the provided content
+- Always be clear about whether you're providing a direct answer or applying analogous rules
 
 RULEBOOK CONTENT:
 ${topChunks}
