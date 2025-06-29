@@ -98,10 +98,10 @@ app.get('/health', (req, res) => {
 // Typesense Search Route (simplified)
 app.get('/search', async (req, res) => {
   const query = req.query.q?.trim() || '';
-  const sportFilter = req.query.sport?.trim() || '';
-  
+  const sportFilter = req.query.sport?.trim().toLowerCase() || '';
+
   console.log('🔍 Search request - Query:', query, 'Sport filter:', sportFilter);
-  
+
   if (!query) {
     return res.status(400).json({ error: 'Query param `q` is required' });
   }
@@ -115,25 +115,32 @@ app.get('/search', async (req, res) => {
       num_typos: 2,
       filter_by: sportFilter ? `sport:=${sportFilter}` : undefined,
       sort_by: '_text_match:desc',
+      highlight_fields: 'title,content',
+      highlight_full_fields: 'title,content',
+      snippet_threshold: 30
     };
 
     const searchResults = await client.collections('rules').documents().search(searchParameters);
-    
-    const hits = searchResults.hits.map(({ document }) => ({
+
+    const hits = searchResults.hits.map(({ document, highlights }) => ({
       number: document.number,
       title: document.title,
       content: document.content,
       sport: document.sport,
       path: document.path,
+      highlights
     }));
 
+    const facets = searchResults.facet_counts || [];
+
     console.log('✅ Search completed - Found', hits.length, 'results');
-    res.json({ hits });
+    res.json({ hits, facets });
   } catch (error) {
     console.error('❌ Search error:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
 
 // Simplified AI Search Route
 app.post('/search-ai', async (req, res) => {
