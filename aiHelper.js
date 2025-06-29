@@ -45,11 +45,6 @@ export default {
 
         prompt = `You are an expert sports rulebook assistant with access to official rules from multiple sports. Your job is to provide the most accurate and contextually appropriate answer.
 
-CRITICAL ANALYSIS PROCESS:
-1. Identify the most likely sport the question refers to.
-2. Prioritize rules from that sport.
-3. Provide a clear, complete answer based on those rules.
-
 QUESTION: "${question}"
 
 AVAILABLE RULEBOOK CONTENT:
@@ -58,12 +53,15 @@ ${topChunks}
 Answer:`;
 
       } else {
-        console.log('⚠️ No relevant content found...');
-        prompt = `You are a sports rulebook assistant. The user asked: "${question}"
+        console.log('⚠️ No relevant rulebook content found. Using general sports knowledge...');
 
-I searched the sports rulebook database but could not find relevant information to answer this specific question.
+        prompt = `You are an expert sports rulebook assistant. I could not find relevant information in the official rulebook database for this question.
 
-Respond with: "I couldn't find specific information about this topic in the available rulebook content. Please try rephrasing your question or ask about specific sports rules that might be in our database."`;
+Based on your general knowledge of sports rules, provide the most accurate answer you can.
+
+QUESTION: "${question}"
+
+Answer:`;
       }
 
       console.log('🤖 Step 5: Sending prompt to OpenAI...');
