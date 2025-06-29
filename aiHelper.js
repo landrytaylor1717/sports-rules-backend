@@ -66,6 +66,9 @@ export default {
       console.log('🔍 Top score:', topScore);
       console.log('🔍 Will use content?', scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH);
 
+      // Declare the prompt variable
+      let prompt;
+
       // Much more lenient conditions - use results if we have ANY matches
       if (scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH) {
         console.log('✅ Using rulebook content...');
