@@ -23,6 +23,16 @@ export default {
       console.log('🤖 Step 3: Querying Pinecone with params:', queryParams);
       const queryResponse = await pineconeIndex.query(queryParams);
       console.log('🤖 Step 4: Pinecone returned', queryResponse.matches?.length || 0, 'matches');
+      
+      // DEBUG: Log first few matches to see what we're getting
+      if (queryResponse.matches?.length > 0) {
+        console.log('🔍 DEBUG: First match details:');
+        console.log('  - Score:', queryResponse.matches[0].score);
+        console.log('  - Metadata:', queryResponse.matches[0].metadata);
+        console.log('  - Content preview:', queryResponse.matches[0].metadata?.content?.substring(0, 150) + '...');
+      } else {
+        console.log('❌ DEBUG: No matches returned from Pinecone');
+      }
 
       let fallbackResults = null;
       if (sport && queryResponse.matches.length < 2) {
@@ -45,14 +55,16 @@ export default {
       console.log(`🎯 Top result score: ${topScore.toFixed(3)}`);
 
       // MUCH more lenient thresholds
-      const CONFIDENCE_THRESHOLD = 0.3; // Lowered from 0.5
+      const CONFIDENCE_THRESHOLD = 0.2; // Even lower since we fixed the embedding model
       const MIN_CONTENT_LENGTH = 15; // Lowered from 30
 
       const topChunks = this.processAndRankResults(scoredMatches, sport, question);
 
       console.log('🔍 Top chunks preview:', topChunks.substring(0, 200) + '...');
-
-      let prompt;
+      console.log('🔍 Top chunks length:', topChunks.length);
+      console.log('🔍 Number of scored matches:', scoredMatches.length);
+      console.log('🔍 Top score:', topScore);
+      console.log('🔍 Will use content?', scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH);
 
       // Much more lenient conditions - use results if we have ANY matches
       if (scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH) {
@@ -114,12 +126,30 @@ Please respond with: "I couldn't find information about this topic in the availa
   },
 
   processAndRankResults(matches, sport, question) {
-    if (!matches || matches.length === 0) return '';
+    if (!matches || matches.length === 0) {
+      console.log('❌ No matches to process');
+      return '';
+    }
 
-    const scoredMatches = matches.map(match => {
+    console.log('🔄 Processing', matches.length, 'matches...');
+
+    const scoredMatches = matches.map((match, index) => {
       let relevanceScore = match.score || 0;
-      const content = match.metadata?.content || '';
+      
+      // DEBUG: Check what's actually in the metadata
+      console.log(`🔍 Match ${index + 1}:`, {
+        score: match.score,
+        hasMetadata: !!match.metadata,
+        metadataKeys: match.metadata ? Object.keys(match.metadata) : [],
+        contentPreview: match.metadata?.content?.substring(0, 50) + '...' || 'NO CONTENT'
+      });
+      
+      const content = match.metadata?.content || match.metadata?.text || '';
       const matchSport = match.metadata?.sport || '';
+
+      if (!content) {
+        console.log(`⚠️ Match ${index + 1} has no content!`);
+      }
 
       // Boost sport-specific matches
       if (sport && matchSport.toLowerCase() === sport.toLowerCase()) {
@@ -165,18 +195,23 @@ Please respond with: "I couldn't find information about this topic in the availa
       score: m.relevanceScore.toFixed(3),
       contentLength: m.content.length,
       originalScore: m.score?.toFixed(3),
-      keywordMatches: m.keywordMatches
+      keywordMatches: m.keywordMatches,
+      hasContent: !!m.content
     })));
 
     // Return top 3-4 results with better formatting
-    return scoredMatches
+    const result = scoredMatches
       .slice(0, 4)
+      .filter(m => m.content) // Only include matches that actually have content
       .map((m, index) => {
         const sportLabel = m.sport?.toUpperCase() || 'GENERAL';
         const scoreInfo = `(Score: ${m.relevanceScore.toFixed(3)})`;
         return `[${sportLabel}] ${scoreInfo}\n${m.content.trim()}`;
       })
       .join('\n\n---\n\n');
+    
+    console.log('🎯 Final processed result length:', result.length);
+    return result;
   },
 
   // Enhanced similarity matching
@@ -232,7 +267,7 @@ Please respond with: "I couldn't find information about this topic in the availa
         'https://api.openai.com/v1/embeddings',
         {
           input: processedText,
-          model: 'text-embedding-ada-002',
+          model: 'text-embedding-3-small', // Changed to match your stored embeddings
         },
         {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
