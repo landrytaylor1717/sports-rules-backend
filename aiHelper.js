@@ -7,10 +7,10 @@ export default {
       const embedding = await this.getEmbedding(question);
       console.log('🤖 Step 2: Got embedding of length:', embedding.length);
 
-      // First, get results from ALL sports (no filtering initially)
+      // Always query all sports first for better context
       const queryParams = {
         vector: embedding,
-        topK: 12, // Get more results to have options from different sports
+        topK: 15, // Increased for better sport coverage
         includeMetadata: true,
       };
 
@@ -23,7 +23,7 @@ export default {
         const sportsFound = [...new Set(queryResponse.matches.map(m => m.metadata?.sport).filter(Boolean))];
         console.log('  - Sports found:', sportsFound);
         
-        queryResponse.matches.slice(0, 3).forEach((match, i) => {
+        queryResponse.matches.slice(0, 5).forEach((match, i) => {
           console.log(`  - Match ${i + 1}: ${match.metadata?.sport || 'Unknown'} (Score: ${match.score?.toFixed(3)})`);
         });
       }
@@ -32,57 +32,70 @@ export default {
       const topScore = scoredMatches[0]?.score || 0;
       console.log(`🎯 Top result score: ${topScore.toFixed(3)}`);
 
-      const MIN_CONTENT_LENGTH = 15;
-      const topChunks = this.processAndRankResults(scoredMatches, null, question);
-
+      // Enhanced processing with better contextual understanding
+      const topChunks = this.processAndRankResults(scoredMatches, question);
+      
       console.log('🔍 Top chunks length:', topChunks.length);
 
       let prompt;
+      const MIN_CONTENT_LENGTH = 15;
 
       if (scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH) {
-        console.log('✅ Using rulebook content with contextual reasoning...');
+        console.log('✅ Using rulebook content with enhanced contextual reasoning...');
         
-        // This is the KEY CHANGE - let the AI reason about context
-        prompt = `You are an intelligent sports rulebook assistant. You have access to rules from multiple sports, and you need to provide the most contextually appropriate answer.
+        // Enhanced prompt with better sport identification logic
+        prompt = `You are an expert sports rulebook assistant with access to official rules from multiple sports. Your job is to provide the most accurate and contextually appropriate answer.
 
-CRITICAL INSTRUCTIONS:
-1. **CONTEXT REASONING**: Look at the question and determine which sport it most likely refers to based on the terminology and scenario described.
+CRITICAL ANALYSIS PROCESS:
+1. **IDENTIFY THE MOST LIKELY SPORT**: Analyze the question terminology and scenario to determine which sport it most likely refers to:
+   - "Ball into water" → Typically GOLF (water hazards are common)
+   - "Ball over fence" → Typically BASEBALL (home runs)
+   - "Out of bounds" → Could be multiple sports, analyze other context clues
+   - "Offside" → Typically FOOTBALL/SOCCER
+   - "Traveling" → Typically BASKETBALL
 
-2. **SPORT PRIORITIZATION**: When you have rulebook content from multiple sports that could theoretically apply, prioritize the sport that makes the most sense given the specific question context.
+2. **PRIORITIZE RELEVANT CONTENT**: Focus primarily on rules from the most contextually appropriate sport, even if other sports have loosely related rules.
 
-3. **NATURAL INFERENCE**: Just like a human expert would do, use common sense about which sport the person is most likely asking about. For example:
-   - "Ball hit into water" → Most likely golf (water hazards)
-   - "Ball over the fence" → Most likely baseball (home runs)
-   - "Ball out of bounds" → Could be multiple sports, look for other clues
+3. **PROVIDE COMPREHENSIVE ANSWERS**: Give detailed, complete answers using the most relevant sport's official rules.
 
-4. **COMPREHENSIVE ANSWERS**: Once you've identified the most appropriate sport, provide detailed, complete answers using that sport's rules.
+4. **ACKNOWLEDGE WHEN UNCERTAIN**: If genuinely ambiguous, mention the uncertainty but still lead with the most probable interpretation.
 
-5. **ACKNOWLEDGE ALTERNATIVES**: If multiple sports could apply, briefly mention this but lead with the most likely interpretation.
+QUESTION: "${question}"
 
-QUESTION: ${question}
-
-AVAILABLE RULEBOOK CONTENT FROM MULTIPLE SPORTS:
+AVAILABLE RULEBOOK CONTENT (ranked by contextual relevance):
 ${topChunks}
 
-Based on the question context and the rulebook content above, provide a comprehensive answer. Start by identifying which sport this question most likely refers to, then provide the detailed rules and procedures for that sport:`;
+INSTRUCTIONS FOR YOUR RESPONSE:
+- Start by identifying which sport this question most likely refers to
+- Provide a comprehensive answer using that sport's official rules
+- Structure your response clearly with headings if appropriate
+- If the question could apply to multiple sports, briefly acknowledge this but focus on the most likely one
+- Base your answer on the official rulebook content provided above
+
+Answer:`;
 
       } else {
-        console.log('⚠️ No content found...');
+        console.log('⚠️ No relevant content found...');
         prompt = `You are a sports rulebook assistant. The user asked: "${question}"
 
-I searched the sports rulebook database but could not find relevant information to answer this question. 
+I searched the sports rulebook database but could not find relevant information to answer this specific question. 
 
-Please respond with: "I couldn't find information about this topic in the available rulebook content. Please try rephrasing your question or ask about specific sports rules and regulations that might be covered in the database."`;
+Please respond with: "I couldn't find specific information about this topic in the available rulebook content. This might be because:
+1. The question relates to a sport not currently in our database
+2. The specific scenario isn't covered in the available rules
+3. The question might need to be rephrased for better matching
+
+Please try rephrasing your question or ask about specific sports rules that might be in our database (such as baseball, basketball, hockey, etc.)."`;
       }
 
-      console.log('🤖 Step 5: Sending contextual prompt to OpenAI...');
+      console.log('🤖 Step 5: Sending enhanced contextual prompt to OpenAI...');
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
           model: 'gpt-4o',
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1, // Lower temperature for more consistent reasoning
-          max_tokens: 1500,
+          temperature: 0.2, // Slightly higher for more natural reasoning
+          max_tokens: 1800, // Increased for comprehensive answers
         },
         {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -93,12 +106,16 @@ Please respond with: "I couldn't find information about this topic in the availa
       console.log('🤖 Step 6: OpenAI returned answer:', aiAnswer);
 
       if (!aiAnswer) {
-        return { answer: "I couldn't find relevant information in the rulebook to answer your question." };
+        return { 
+          answer: "I couldn't generate a response. Please try rephrasing your question.",
+          searchResultsCount: scoredMatches.length 
+        };
       }
 
       return { 
         answer: aiAnswer,
-        searchResultsCount: scoredMatches.length
+        searchResultsCount: scoredMatches.length,
+        sportsFound: [...new Set(scoredMatches.map(m => m.metadata?.sport).filter(Boolean))]
       };
 
     } catch (error) {
@@ -107,7 +124,7 @@ Please respond with: "I couldn't find information about this topic in the availa
     }
   },
 
-  processAndRankResults(matches, sport, question) {
+  processAndRankResults(matches, question) {
     if (!matches || matches.length === 0) {
       console.log('❌ No matches to process');
       return '';
@@ -126,47 +143,69 @@ Please respond with: "I couldn't find information about this topic in the availa
         return null;
       }
 
-      // Enhanced contextual scoring based on question content
       const questionLower = question.toLowerCase();
       const contentLower = content.toLowerCase();
 
-      // Context-specific boosting
-      if (questionLower.includes('water')) {
-        if (matchSport.toLowerCase() === 'golf' && 
-            (contentLower.includes('water hazard') || contentLower.includes('penalty') || contentLower.includes('drop'))) {
-          relevanceScore += 0.4; // Strong boost for golf water hazard rules
+      // ENHANCED CONTEXTUAL SCORING
+      // Water-related questions (likely golf)
+      if (questionLower.includes('water') || questionLower.includes('pond') || questionLower.includes('lake')) {
+        if (matchSport.toLowerCase() === 'golf') {
+          if (contentLower.includes('water hazard') || contentLower.includes('penalty area') || 
+              contentLower.includes('lateral water hazard') || contentLower.includes('yellow stakes') ||
+              contentLower.includes('red stakes')) {
+            relevanceScore += 0.5; // Strong boost for golf water hazard rules
+            console.log(`🎯 Strong golf water hazard boost for match ${index + 1}`);
+          }
         }
       }
 
-      if (questionLower.includes('fence') || questionLower.includes('over')) {
-        if (matchSport.toLowerCase() === 'baseball' && 
-            (contentLower.includes('home run') || contentLower.includes('fence') || contentLower.includes('boundary'))) {
-          relevanceScore += 0.4; // Strong boost for baseball boundary rules
+      // Fence/boundary questions (likely baseball)
+      if (questionLower.includes('fence') || questionLower.includes('over the fence') || 
+          questionLower.includes('boundary') || questionLower.includes('home run')) {
+        if (matchSport.toLowerCase() === 'baseball') {
+          if (contentLower.includes('home run') || contentLower.includes('fence') || 
+              contentLower.includes('boundary') || contentLower.includes('foul territory')) {
+            relevanceScore += 0.5;
+            console.log(`🎯 Strong baseball boundary boost for match ${index + 1}`);
+          }
         }
       }
 
-      // General keyword matching
+      // Out of bounds questions (multiple sports, but context-dependent)
+      if (questionLower.includes('out of bounds') || questionLower.includes('out-of-bounds')) {
+        // Small boost to any sport with out of bounds rules
+        if (contentLower.includes('out of bounds') || contentLower.includes('boundary')) {
+          relevanceScore += 0.2;
+        }
+      }
+
+      // Enhanced keyword matching with sport-specific terms
       const questionWords = question.toLowerCase()
         .replace(/[^\w\s]/g, '')
         .split(' ')
         .filter(word => word.length > 2 && !this.isStopWord(word));
 
-      const keywordMatches = questionWords.filter(word => 
-        contentLower.includes(word) || 
-        this.findSimilarWord(word, contentLower) ||
-        this.findPartialMatch(word, contentLower)
-      ).length;
+      let keywordMatches = 0;
+      questionWords.forEach(word => {
+        if (contentLower.includes(word)) {
+          keywordMatches++;
+        } else if (this.findSimilarWord(word, contentLower)) {
+          keywordMatches += 0.5; // Partial credit for similar terms
+        }
+      });
       
       if (keywordMatches > 0) {
-        relevanceScore += (keywordMatches * 0.05);
+        relevanceScore += (keywordMatches * 0.06);
       }
 
-      // Boost longer, more detailed content
-      if (content.length > 200) {
-        relevanceScore += 0.03;
+      // Boost comprehensive content
+      if (content.length > 300) {
+        relevanceScore += 0.04;
+      } else if (content.length > 150) {
+        relevanceScore += 0.02;
       }
 
-      console.log(`🔍 Match ${index + 1}: ${matchSport} - Score: ${relevanceScore.toFixed(3)} (Original: ${match.score?.toFixed(3)})`);
+      console.log(`🔍 Match ${index + 1}: ${matchSport} - Score: ${relevanceScore.toFixed(3)} (Original: ${match.score?.toFixed(3)}, Keywords: ${keywordMatches})`);
 
       return {
         ...match,
@@ -175,9 +214,9 @@ Please respond with: "I couldn't find information about this topic in the availa
         sport: matchSport,
         keywordMatches
       };
-    }).filter(Boolean); // Remove null entries
+    }).filter(Boolean);
 
-    // Sort by relevance score
+    // Sort by relevance score (highest first)
     scoredMatches.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
     console.log('🎯 Final ranked results by sport:');
@@ -191,13 +230,13 @@ Please respond with: "I couldn't find information about this topic in the availa
       console.log(`  - ${sport}: ${scores.slice(0, 3).join(', ')}${scores.length > 3 ? '...' : ''}`);
     });
 
-    // Return top 8 results with clear sport labeling
+    // Return top results with clear prioritization
     const result = scoredMatches
-      .slice(0, 8) // Get top 8 for comprehensive context
+      .slice(0, 10) // Get top 10 for comprehensive context
       .map((m, index) => {
         const sportLabel = m.sport?.toUpperCase() || 'GENERAL';
         const scoreInfo = `(Relevance: ${m.relevanceScore.toFixed(3)})`;
-        const priority = index < 3 ? '⭐ ' : ''; // Mark top 3 as priority
+        const priority = index === 0 ? '🏆 PRIMARY: ' : index < 3 ? '⭐ ' : '• ';
         return `${priority}[${sportLabel}] ${scoreInfo}\n${m.content.trim()}`;
       })
       .join('\n\n---\n\n');
@@ -208,19 +247,21 @@ Please respond with: "I couldn't find information about this topic in the availa
 
   findSimilarWord(targetWord, content) {
     const termMappings = {
-      'water': ['water hazard', 'pond', 'lake', 'stream', 'river', 'lateral water hazard', 'penalty area'],
-      'ball': ['golf ball', 'ball in water', 'lost ball', 'ball in play'],
-      'hit': ['stroke', 'shot', 'play', 'strike'],
-      'penalty': ['penalty stroke', 'drop', 'relief', 'one-stroke penalty'],
-      'fence': ['boundary', 'home run', 'foul territory', 'out of play'],
-      'goal': ['field goal', 'touchdown', 'scoring', 'endzone', 'goalpost'],
-      'field': ['field goal', 'playing field', 'football field', 'gridiron'],
-      'down': ['first down', 'second down', 'third down', 'fourth down', 'downs'],
-      'player': ['players', 'team member', 'athlete', 'golfer', 'batter'],
-      'score': ['scoring', 'points', 'touchdown', 'field goal', 'par', 'birdie'],
-      'time': ['clock', 'timer', 'timeout', 'quarter', 'period'],
-      'pass': ['passing', 'throw', 'forward pass', 'incomplete'],
-      'run': ['running', 'rush', 'carry', 'ground game']
+      'water': ['water hazard', 'pond', 'lake', 'stream', 'river', 'lateral water hazard', 'penalty area', 'yellow stakes', 'red stakes'],
+      'ball': ['golf ball', 'ball in water', 'lost ball', 'ball in play', 'baseball', 'basketball'],
+      'hit': ['stroke', 'shot', 'play', 'strike', 'swing', 'contact'],
+      'penalty': ['penalty stroke', 'drop', 'relief', 'one-stroke penalty', 'two-stroke penalty'],
+      'fence': ['boundary', 'home run', 'foul territory', 'out of play', 'wall', 'barrier'],
+      'goal': ['field goal', 'touchdown', 'scoring', 'endzone', 'goalpost', 'goal line'],
+      'field': ['field goal', 'playing field', 'football field', 'gridiron', 'court', 'pitch'],
+      'down': ['first down', 'second down', 'third down', 'fourth down', 'downs', 'possession'],
+      'player': ['players', 'team member', 'athlete', 'golfer', 'batter', 'quarterback'],
+      'score': ['scoring', 'points', 'touchdown', 'field goal', 'par', 'birdie', 'run', 'basket'],
+      'time': ['clock', 'timer', 'timeout', 'quarter', 'period', 'half', 'overtime'],
+      'pass': ['passing', 'throw', 'forward pass', 'incomplete', 'completion'],
+      'run': ['running', 'rush', 'carry', 'ground game', 'rushing'],
+      'bounds': ['boundary', 'out of bounds', 'sideline', 'baseline', 'perimeter'],
+      'foul': ['foul ball', 'personal foul', 'technical foul', 'flagrant', 'violation']
     };
 
     const mappings = termMappings[targetWord.toLowerCase()] || [];
@@ -233,7 +274,7 @@ Please respond with: "I couldn't find information about this topic in the availa
     const words = content.split(/\s+/);
     return words.some(word => {
       const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
-      return cleanWord.includes(targetWord) || targetWord.includes(cleanWord);
+      return (cleanWord.length > 3 && (cleanWord.includes(targetWord) || targetWord.includes(cleanWord)));
     });
   },
 
@@ -245,7 +286,7 @@ Please respond with: "I couldn't find information about this topic in the availa
       'what', 'which', 'who', 'whom', 'whose', 'this', 'that', 'these', 'those',
       'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
       'my', 'your', 'his', 'her', 'its', 'our', 'their', 'a', 'an', 'as', 'at', 'by',
-      'for', 'from', 'in', 'into', 'of', 'on', 'to', 'with', 'about'
+      'for', 'from', 'in', 'into', 'of', 'on', 'to', 'with', 'about', 'happens'
     ];
     return stopWords.includes(word.toLowerCase());
   },
@@ -273,6 +314,10 @@ Please respond with: "I couldn't find information about this topic in the availa
   },
 
   preprocessTextForEmbedding(text) {
-    return text.trim().replace(/\s+/g, ' ');
+    // Enhanced preprocessing for better embedding quality
+    return text.trim()
+      .replace(/\s+/g, ' ')
+      .replace(/[^\w\s\?]/g, '') // Remove punctuation except question marks
+      .toLowerCase();
   }
 };
