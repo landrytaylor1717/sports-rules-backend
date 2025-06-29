@@ -9,7 +9,7 @@ export default {
 
       const queryParams = {
         vector: embedding,
-        topK: 5,
+        topK: 8, // Increased from 5 to get more relevant chunks
         includeMetadata: true,
       };
 
@@ -39,7 +39,7 @@ export default {
         console.log('🔄 Few sport-specific results, trying fallback without filter...');
         fallbackResults = await pineconeIndex.query({
           vector: embedding,
-          topK: 5,
+          topK: 8, // Increased from 5 to match main query
           includeMetadata: true,
         });
         console.log('🔄 Fallback returned', fallbackResults.matches?.length || 0, 'matches');
@@ -78,10 +78,14 @@ export default {
 
 CRITICAL INSTRUCTIONS:
 - Base your answer ENTIRELY on the rulebook content provided
-- If the content fully answers the question, provide a complete answer
+- Provide comprehensive, detailed answers when the content supports it
+- Include relevant context, examples, and specific rule citations when available
+- If the content fully answers the question, provide a complete and thorough answer
 - If the content partially answers the question, provide what information is available and clearly state what aspects aren't covered
 - Do NOT say "the rulebook doesn't contain information" if you're about to provide information from it
-- Be direct and helpful - if you have relevant information, share it confidently
+- Be direct and helpful - if you have relevant information, share it confidently with full detail
+- When multiple rule sections are relevant, explain how they work together
+- Include any important exceptions, conditions, or special cases mentioned in the content
 - Only mention that information is missing if it truly is missing from the provided content
 
 RULEBOOK CONTENT:
@@ -89,7 +93,7 @@ ${topChunks}
 
 QUESTION: ${question}
 
-Based on the rulebook content above, here is the answer:`;
+Based on the rulebook content above, provide a comprehensive answer with full details and context:`;
       } else {
         console.log('⚠️ No content found...');
         prompt = `You are a sports rulebook assistant. The user asked: "${question}"
@@ -106,7 +110,7 @@ Please respond with: "I couldn't find information about this topic in the availa
           model: 'gpt-4o',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3, // Balanced for natural but consistent responses
-          max_tokens: 1000, // Increased for more complete answers
+          max_tokens: 1500, // Increased from 1000 for more detailed responses
         },
         {
           headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -202,9 +206,9 @@ Please respond with: "I couldn't find information about this topic in the availa
       hasContent: !!m.content
     })));
 
-    // Return top 3-4 results with better formatting
+    // Return top 5-6 results with better formatting
     const result = scoredMatches
-      .slice(0, 4)
+      .slice(0, 6) // Increased from 4 to 6 for more comprehensive context
       .filter(m => m.content) // Only include matches that actually have content
       .map((m, index) => {
         const sportLabel = m.sport?.toUpperCase() || 'GENERAL';
