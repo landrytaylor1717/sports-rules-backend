@@ -58,29 +58,30 @@ export default {
       if (scoredMatches.length > 0 && topChunks.trim().length > MIN_CONTENT_LENGTH) {
         console.log('✅ Using rulebook content...');
         
-        // Enhanced prompt for better handling of partial matches
-        prompt = `You are a sports rulebook assistant. Use the provided rulebook content to answer the question as best as possible.
+        // Enhanced prompt that doesn't contradict itself
+        prompt = `You are a sports rulebook assistant. Answer the question using ONLY the information provided in the rulebook content below. 
 
-IMPORTANT INSTRUCTIONS:
-- If the content directly answers the question, provide a clear, complete answer
-- If the content only partially relates to the question, extract and present the relevant information
-- If multiple pieces of information are provided, organize them clearly
-- Always be helpful and informative, even if the match isn't perfect
-- If you're unsure about something, acknowledge the uncertainty but still provide available information
+CRITICAL INSTRUCTIONS:
+- Base your answer ENTIRELY on the rulebook content provided
+- If the content fully answers the question, provide a complete answer
+- If the content partially answers the question, provide what information is available and clearly state what aspects aren't covered
+- Do NOT say "the rulebook doesn't contain information" if you're about to provide information from it
+- Be direct and helpful - if you have relevant information, share it confidently
+- Only mention that information is missing if it truly is missing from the provided content
 
 RULEBOOK CONTENT:
 ${topChunks}
 
 QUESTION: ${question}
 
-ANSWER:`;
+Based on the rulebook content above, here is the answer:`;
       } else {
         console.log('⚠️ No content found...');
         prompt = `You are a sports rulebook assistant. The user asked: "${question}"
 
-I could not find relevant information in the sports rulebook database to answer this question. 
+I searched the sports rulebook database but could not find relevant information to answer this question. 
 
-Please respond with: "I couldn't find relevant information in the rulebook to answer your question. Please try rephrasing your question or ask about specific sports rules and regulations."`;
+Please respond with: "I couldn't find information about this topic in the available rulebook content. Please try rephrasing your question or ask about specific sports rules and regulations that might be covered in the database."`;
       }
 
       console.log('🤖 Step 5: Sending prompt to OpenAI...');
