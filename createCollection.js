@@ -21,11 +21,11 @@ async function createCollection() {
     name: 'rules',
     fields: [
       { name: 'number', type: 'string', index: true, sort: true, store: true },
-      { name: 'title', type: 'string', index: true, store: true, prefix: true },
-      { name: 'content', type: 'string', index: true, store: true, prefix: true },
-      { name: 'combined', type: 'string', index: true, store: false },
-      { name: 'sport', type: 'string', index: true, store: true, facet: true, prefix: true },
-      { name: 'path', type: 'string', index: false, store: true, optional: true }, // Added optional: true
+      { name: 'title', type: 'string', index: true, store: true, facet: true, optional: true },
+      { name: 'content', type: 'text', index: true, store: true },
+      { name: 'combined', type: 'string', index: true, store: false, optional: true },
+      { name: 'sport', type: 'string', index: true, store: true, facet: true },
+      { name: 'path', type: 'string', index: false, store: true, optional: true },
     ],
     default_sorting_field: 'number',
     token_separators: ['-', '.', ':', '(', ')', ' '],
